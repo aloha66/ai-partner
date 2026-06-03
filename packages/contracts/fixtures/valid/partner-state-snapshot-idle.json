@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "ai-partner.partner-state-snapshot.v1",
+  "workflowState": "idle",
+  "runId": null,
+  "activeRunId": null,
+  "source": null,
+  "priority": "normal",
+  "updatedAt": "2026-06-02T00:03:00Z",
+  "paused": false,
+  "connection": "ok"
+}

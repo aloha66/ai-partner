@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "ai-partner.workflow-event.v1",
+  "event_id": "evt_20260602_0002",
+  "source": "cli",
+  "run_id": "run_abc123",
+  "workflow_state": "waiting",
+  "timestamp": "2026-06-02T00:01:00Z",
+  "message": "等待用户确认",
+  "code_context_allowed": false
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "ai-partner.workflow-event.v1",
+  "event_id": "evt_20260602_bad2",
+  "source": "codex-wrapper",
+  "run_id": "run_abc123",
+  "workflow_state": "editing",
+  "timestamp": "2026-06-02T00:00:00Z",
+  "message": "editing",
+  "code_context_allowed": false,
+  "diff": "--- secret diff"
+}

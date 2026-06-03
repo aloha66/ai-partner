@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-partner.local/schema/workflow-event.schema.json",
+  "title": "WorkflowEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "event_id",
+    "source",
+    "run_id",
+    "workflow_state",
+    "timestamp",
+    "code_context_allowed"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "ai-partner.workflow-event.v1"
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^evt_[A-Za-z0-9._:-]+$"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["cli", "codex-wrapper", "demo-script"]
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^run_[A-Za-z0-9._:-]+$"
+    },
+    "workflow_state": {
+      "type": "string",
+      "enum": ["idle", "running", "reading", "editing", "waiting", "error", "done"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "message": {
+      "type": "string",
+      "maxLength": 160,
+      "pattern": "^[^\\r\\n]*$"
+    },
+    "code_context_allowed": {
+      "const": false
+    }
+  }
+}

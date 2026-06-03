@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "ai-partner.animation-intent.v1",
+  "body": {
+    "animation": "petdex.review",
+    "procedural": [],
+    "loop": true
+  },
+  "bubble": null,
+  "queued": []
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-partner.local/schema/runtime-descriptor.schema.json",
+  "title": "RuntimeDescriptor",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "appInstanceId", "pid", "port", "token", "createdAt"],
+  "properties": {
+    "schemaVersion": {
+      "const": "ai-partner.runtime-descriptor.v1"
+    },
+    "appInstanceId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^app_[A-Za-z0-9._:-]+$"
+    },
+    "pid": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "token": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9._~+/=-]+$"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

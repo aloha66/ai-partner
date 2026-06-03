@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "ai-partner.animation-intent.v1",
+  "body": {
+    "animation": "legacy.review",
+    "procedural": [],
+    "loop": true
+  },
+  "bubble": {
+    "state": "reading",
+    "text": "正在读取项目内容",
+    "priority": "normal"
+  },
+  "queued": []
+}

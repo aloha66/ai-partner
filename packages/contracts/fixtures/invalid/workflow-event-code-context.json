@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "ai-partner.workflow-event.v1",
+  "event_id": "evt_20260602_bad1",
+  "source": "codex-wrapper",
+  "run_id": "run_abc123",
+  "workflow_state": "reading",
+  "timestamp": "2026-06-02T00:00:00Z",
+  "message": "leaks code",
+  "code_context_allowed": true
+}

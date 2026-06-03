@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "ai-partner.workflow-event.v1",
+  "event_id": "evt_20260602_0001",
+  "source": "codex-wrapper",
+  "run_id": "run_abc123",
+  "workflow_state": "reading",
+  "timestamp": "2026-06-02T00:00:00Z",
+  "message": "正在读取项目内容",
+  "code_context_allowed": false
+}

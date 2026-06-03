@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-partner.local/schema/partner-state-snapshot.schema.json",
+  "title": "PartnerStateSnapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "workflowState",
+    "runId",
+    "activeRunId",
+    "source",
+    "priority",
+    "updatedAt",
+    "paused",
+    "connection"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "ai-partner.partner-state-snapshot.v1"
+    },
+    "workflowState": {
+      "type": "string",
+      "enum": ["idle", "running", "reading", "editing", "waiting", "error", "done"]
+    },
+    "runId": {
+      "type": ["string", "null"],
+      "maxLength": 120,
+      "pattern": "^run_[A-Za-z0-9._:-]+$"
+    },
+    "activeRunId": {
+      "type": ["string", "null"],
+      "maxLength": 120,
+      "pattern": "^run_[A-Za-z0-9._:-]+$"
+    },
+    "source": {
+      "type": ["string", "null"],
+      "enum": ["cli", "codex-wrapper", "demo-script", null]
+    },
+    "message": {
+      "type": "string",
+      "maxLength": 160,
+      "pattern": "^[^\\r\\n]*$"
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["normal", "high"]
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "paused": {
+      "type": "boolean"
+    },
+    "connection": {
+      "type": "string",
+      "enum": ["ok", "degraded", "disconnected"]
+    }
+  }
+}

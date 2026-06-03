@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "ai-partner.partner-state-snapshot.v1",
+  "workflowState": "reading",
+  "runId": "run_abc123",
+  "activeRunId": "run_abc123",
+  "source": "codex-wrapper",
+  "message": "正在读取项目内容",
+  "priority": "normal",
+  "updatedAt": "2026-06-02T00:00:00Z",
+  "paused": false,
+  "connection": "ok"
+}

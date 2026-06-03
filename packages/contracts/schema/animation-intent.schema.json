@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-partner.local/schema/animation-intent.schema.json",
+  "title": "AnimationIntent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "body", "bubble", "queued"],
+  "properties": {
+    "schemaVersion": {
+      "const": "ai-partner.animation-intent.v1"
+    },
+    "body": {
+      "$ref": "#/$defs/bodyIntent"
+    },
+    "bubble": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "text", "priority"],
+          "properties": {
+            "state": {
+              "type": "string",
+              "enum": ["idle", "running", "reading", "editing", "waiting", "error", "done"]
+            },
+            "text": {
+              "type": "string",
+              "maxLength": 160,
+              "pattern": "^[^\\r\\n]*$"
+            },
+            "priority": {
+              "type": "string",
+              "enum": ["normal", "high"]
+            }
+          }
+        }
+      ]
+    },
+    "queued": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["animation", "reason", "expiresAt"],
+        "properties": {
+          "animation": {
+            "$ref": "#/$defs/animationRef"
+          },
+          "reason": {
+            "type": "string",
+            "enum": ["physical-override"]
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "animationRef": {
+      "type": "string",
+      "pattern": "^(workflow|physical|legacy)\\.[a-z0-9-]+$"
+    },
+    "bodyIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["animation", "procedural", "loop"],
+      "properties": {
+        "animation": {
+          "$ref": "#/$defs/animationRef"
+        },
+        "procedural": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "enum": ["shake", "squash", "float", "drop"]
+          }
+        },
+        "loop": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

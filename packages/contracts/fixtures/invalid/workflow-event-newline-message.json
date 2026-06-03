@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "ai-partner.workflow-event.v1",
+  "event_id": "evt_20260602_bad3",
+  "source": "cli",
+  "run_id": "run_abc123",
+  "workflow_state": "waiting",
+  "timestamp": "2026-06-02T00:00:00Z",
+  "message": "line one\nline two",
+  "code_context_allowed": false
+}

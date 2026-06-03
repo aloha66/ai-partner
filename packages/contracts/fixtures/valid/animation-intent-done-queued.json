@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "ai-partner.animation-intent.v1",
+  "body": {
+    "animation": "physical.falling",
+    "procedural": ["drop"],
+    "loop": false
+  },
+  "bubble": {
+    "state": "done",
+    "text": "已完成",
+    "priority": "normal"
+  },
+  "queued": [
+    {
+      "animation": "workflow.done",
+      "reason": "physical-override",
+      "expiresAt": "2026-06-02T00:00:05Z"
+    }
+  ]
+}
