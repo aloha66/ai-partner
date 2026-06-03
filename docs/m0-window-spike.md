@@ -61,18 +61,20 @@ M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、
 
 ## M1 最小 State Bridge 进展
 
-2026-06-03 已进入 M1 的最小 Rust State Bridge，但仅完成内存状态桥第一片，不实现 Codex wrapper、完整 renderer、完整 asset loader。
+2026-06-03 已进入 M1 的最小 Rust State Bridge。本轮只完成并复核内存状态桥第一片，不实现 Codex wrapper、完整 renderer、完整 asset loader。
 
 已完成：
 
 - `src-tauri/src/state.rs`：新增 Rust `PartnerStateStore`，维护 `PartnerStateSnapshot`、active run、pause/resume、clear error、done -> idle timer。
+- Rust 状态机边界已复核并补齐：`schemaVersion`、`event_id` / `run_id` 前缀、长度和字符集、RFC3339 timestamp、禁止 `code_context_allowed`、message 160 字和换行拒绝、active run 仲裁、stale timestamp 拒绝、pause/resume 不取消 done timer、`clear_error -> idle`。
 - `src-tauri/src/lib.rs`：新增 Tauri commands：`get_current_state`、`apply_workflow_event`、`pause`、`resume`、`clear_error`，并在状态变化时 emit `partner-state-changed`。
-- Rust tests 覆盖 idle 初始快照、active run 抢占、旧 run done 不覆盖新 active run、pause suppress emit、resume snapshot、clear error、done timer、stale done timer、code context/newline message 拒绝。
+- Rust tests 覆盖 idle 初始快照、active run 抢占、旧 run done/error 不覆盖新 active run、active idle 清空 run、pause suppress emit、resume snapshot、paused clear error、done timer、pause 期间 done timer 继续回 idle、stale done timer、stale timestamp、schema/id/timestamp/code context/message 拒绝。
 
 仍未做：
 
 - localhost `POST /events` ingress。
 - runtime descriptor 写入、token、端口发现。
+- event id dedupe TTL/LRU、per-run debounce、rate limit、payload 4KB、CORS/origin/auth 等 ingress 安全预算。
 - debug CLI / Codex wrapper。
 - 前端 renderer 状态订阅和完整状态展示。
 

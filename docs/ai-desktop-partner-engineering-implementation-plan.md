@@ -376,11 +376,11 @@ interface PartnerCapabilities {
 ```text
 CODE PATHS                                             USER FLOWS
 [+] Contracts/schema                                   [+] First launch desktop companion
-  ├── [GAP] WorkflowEvent valid/invalid fixtures          ├── [GAP] [->E2E/manual] default partner visible
-  ├── [GAP] PartnerStateSnapshot fixtures                 ├── [GAP] [->E2E/manual] no focus stealing
-  ├── [GAP] AnimationIntent fixtures                      └── [GAP] [->E2E/manual] tray/shortcut recovery
-  ├── [GAP] RuntimeDescriptor fixtures
-  └── [GAP] snake_case <-> camelCase boundary
+  ├── [DONE] WorkflowEvent valid/invalid fixtures         ├── [DONE] [->E2E/manual] default partner visible
+  ├── [DONE] PartnerStateSnapshot fixtures                ├── [DONE] [->E2E/manual] no focus stealing
+  ├── [DONE] AnimationIntent fixtures                     └── [DONE] [->E2E/manual] tray/shortcut recovery
+  ├── [DONE] RuntimeDescriptor fixtures
+  └── [DONE] snake_case <-> camelCase boundary
 
 [+] Runtime descriptor                                 [+] Codex run visible on desktop
   ├── [GAP] atomic write + 0600 permissions               ├── [GAP] [->E2E] running -> reading -> editing -> done
@@ -393,18 +393,18 @@ CODE PATHS                                             USER FLOWS
   ├── [GAP] payload 4KB + forbidden fields                ├── [GAP] [->E2E] waiting bubble survives drag
   ├── [GAP] duplicate event id + TTL/LRU                  └── [GAP] done body celebration expires after 5s
   ├── [GAP] 10 events/s burst 30 rate budget
-  ├── [GAP] message newline removal/truncation
-  ├── [GAP] activeRunId arbitration
-  ├── [GAP] done -> idle after 3s
-  ├── [GAP] error persists until clear
-  └── [GAP] get_current_state/pause/resume/clear_error
+  ├── [DONE] message newline/length rejection
+  ├── [DONE] activeRunId arbitration
+  ├── [DONE] done -> idle after 3s
+  ├── [DONE] error persists until clear
+  └── [DONE] get_current_state/pause/resume/clear_error
 
 [+] Tauri bridge + renderer                            [+] Partner selection
-  ├── [GAP] state event delivered to renderer             ├── [GAP] corrupt asset shows default partner
-  ├── [GAP] startup/reopen pulls current snapshot         ├── [GAP] search/switch local partner
+  ├── [PARTIAL] state event emitted by Rust               ├── [GAP] corrupt asset shows default partner
+  ├── [GAP] renderer subscription pulls current snapshot  ├── [GAP] search/switch local partner
   ├── [GAP] CSS frame + bubble/source badge visual        └── [GAP] exit requires confirmation
   ├── [GAP] physicalStateMachine reducer
-  └── [GAP] integer scale/frame alignment
+  └── [DONE] M0 integer scale/frame alignment
 
 [+] TypeScript resolver                                [+] Desktop shell
   ├── [GAP] workflow normal mappings                      ├── [GAP] [->E2E/manual] transparent window
@@ -431,7 +431,7 @@ CODE PATHS                                             USER FLOWS
 
 LLM integration: [NOT MVP] [->EVAL] only when opt-in LLM or memory ships
 
-COVERAGE NOW: 0/60 paths tested because implementation has not started
+COVERAGE NOW: M0 + contracts + minimal Rust State Bridge paths are tested; ingress, descriptor runtime behavior, renderer, resolver, assets, wrapper and packaging remain planned gaps
 TARGET: 60/60 planned before MVP acceptance
 QUALITY TARGET: contracts/security/resolver/assets/wrapper need behavior + edge + error tests
 ```
@@ -721,27 +721,27 @@ Acceptance:
 
 目标：外部事件进来，Rust 变成状态快照。
 
-Status 2026-06-03：已完成最小内存 State Bridge 第一片：Rust `PartnerStateStore`、Tauri commands（`get_current_state`、`apply_workflow_event`、`pause`、`resume`、`clear_error`）、`partner-state-changed` event emit、done -> idle timer 和 active run/pause/error tests。尚未实现 localhost ingress、runtime descriptor、debug CLI 或 Codex wrapper。
+Status 2026-06-03：已完成并复核最小内存 State Bridge 第一片：Rust `PartnerStateStore`、Tauri commands（`get_current_state`、`apply_workflow_event`、`pause`、`resume`、`clear_error`）、`partner-state-changed` event emit、done -> idle timer、active run 仲裁、pause/resume、error clear、schema/id/timestamp/message/code-context 校验和 stale timestamp 拒绝。Rust tests 已覆盖这些最小状态桥边界。尚未实现 localhost ingress、runtime descriptor、debug CLI、Codex wrapper、完整 renderer 或完整 asset loader。
 
 Tasks:
 
 - `POST /events` 只监听 `127.0.0.1`。
 - runtime token 认证。
 - Runtime descriptor 原子写入、权限、stale cleanup。
-- schema validation、白名单、payload 4KB、forbidden fields。
+- schema validation、白名单、payload 4KB、forbidden fields。（最小 State Bridge 已做 Rust command 入参的 schemaVersion/id/timestamp/message/code_context_allowed 校验；完整 ingress 仍需 JSON Schema/payload/security gate。）
 - CORS/origin reject。
-- event id 去重，TTL/LRU。
+- event id 去重，TTL/LRU。（未做，留给 ingress slice。）
 - Per-run 300ms debounce。
 - Per-run 10 events/s、burst 30 rate limit。
-- `activeRunId` 仲裁。
-- Soft pause latest safe snapshot。
-- `get_current_state`、`pause`、`resume`、`clear_error` commands。
-- Rust 管 workflow `done -> idle` timer。
-- Tauri event 推送 `PartnerStateSnapshot`。
+- `activeRunId` 仲裁。（最小 State Bridge 已做。）
+- Soft pause latest safe snapshot。（最小 State Bridge 已做。）
+- `get_current_state`、`pause`、`resume`、`clear_error` commands。（最小 State Bridge 已做。）
+- Rust 管 workflow `done -> idle` timer。（最小 State Bridge 已做，pause/resume 不取消 timer。）
+- Tauri event 推送 `PartnerStateSnapshot`。（最小 State Bridge 已做。）
 
 Acceptance:
 
-- Rust tests 覆盖 security、descriptor、state transition、active run、pause/resume 和 rate budget。
+- Rust tests 覆盖 security、descriptor、state transition、active run、pause/resume 和 rate budget。（当前仅 state transition / active run / pause-resume / done timer / command payload privacy validation 已覆盖；descriptor、auth、payload limit、dedupe、rate budget 仍待完整 ingress slice。）
 - CLI 能发出所有 workflow 状态。
 
 ### M2: Frontend Partner Window

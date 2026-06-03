@@ -76,10 +76,7 @@ fn resume(store: State<'_, PartnerStateStore>) -> PartnerStateSnapshot {
 }
 
 #[tauri::command]
-fn clear_error(
-    app: AppHandle,
-    store: State<'_, PartnerStateStore>,
-) -> PartnerStateSnapshot {
+fn clear_error(app: AppHandle, store: State<'_, PartnerStateStore>) -> PartnerStateSnapshot {
     let transition = store.clear_error();
     emit_state_transition(&app, &store, &transition);
     transition.snapshot

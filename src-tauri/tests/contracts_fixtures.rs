@@ -94,7 +94,10 @@ fn fixture_paths(kind: &str) -> Vec<PathBuf> {
     let mut paths = fs::read_dir(Path::new(CONTRACTS_ROOT).join("fixtures").join(kind))
         .expect("fixture directory should exist")
         .map(|entry| entry.expect("fixture entry should be readable").path())
-        .filter(|path| path.extension().is_some_and(|extension| extension == "json"))
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "json")
+        })
         .collect::<Vec<_>>();
 
     paths.sort();
@@ -151,16 +154,17 @@ fn rust_rejects_invalid_json_schema_fixtures() {
 #[test]
 fn rust_deserializes_representative_contract_fixtures() {
     let workflow_event: WorkflowEventWire = serde_json::from_value(read_json(
-        &Path::new(CONTRACTS_ROOT)
-            .join("fixtures/valid/workflow-event-reading.json"),
+        &Path::new(CONTRACTS_ROOT).join("fixtures/valid/workflow-event-reading.json"),
     ))
     .expect("valid workflow event should deserialize");
-    assert_eq!(workflow_event.schema_version, "ai-partner.workflow-event.v1");
+    assert_eq!(
+        workflow_event.schema_version,
+        "ai-partner.workflow-event.v1"
+    );
     assert!(!workflow_event.code_context_allowed);
 
     let snapshot: PartnerStateSnapshot = serde_json::from_value(read_json(
-        &Path::new(CONTRACTS_ROOT)
-            .join("fixtures/valid/partner-state-snapshot-reading.json"),
+        &Path::new(CONTRACTS_ROOT).join("fixtures/valid/partner-state-snapshot-reading.json"),
     ))
     .expect("valid snapshot should deserialize");
     assert_eq!(
