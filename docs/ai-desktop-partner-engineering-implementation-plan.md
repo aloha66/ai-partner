@@ -721,6 +721,8 @@ Acceptance:
 
 目标：外部事件进来，Rust 变成状态快照。
 
+Status 2026-06-03：已完成最小内存 State Bridge 第一片：Rust `PartnerStateStore`、Tauri commands（`get_current_state`、`apply_workflow_event`、`pause`、`resume`、`clear_error`）、`partner-state-changed` event emit、done -> idle timer 和 active run/pause/error tests。尚未实现 localhost ingress、runtime descriptor、debug CLI 或 Codex wrapper。
+
 Tasks:
 
 - `POST /events` 只监听 `127.0.0.1`。

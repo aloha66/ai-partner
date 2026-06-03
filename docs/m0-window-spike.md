@@ -59,6 +59,23 @@ pnpm tauri:dev
 
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
 
+## M1 最小 State Bridge 进展
+
+2026-06-03 已进入 M1 的最小 Rust State Bridge，但仅完成内存状态桥第一片，不实现 Codex wrapper、完整 renderer、完整 asset loader。
+
+已完成：
+
+- `src-tauri/src/state.rs`：新增 Rust `PartnerStateStore`，维护 `PartnerStateSnapshot`、active run、pause/resume、clear error、done -> idle timer。
+- `src-tauri/src/lib.rs`：新增 Tauri commands：`get_current_state`、`apply_workflow_event`、`pause`、`resume`、`clear_error`，并在状态变化时 emit `partner-state-changed`。
+- Rust tests 覆盖 idle 初始快照、active run 抢占、旧 run done 不覆盖新 active run、pause suppress emit、resume snapshot、clear error、done timer、stale done timer、code context/newline message 拒绝。
+
+仍未做：
+
+- localhost `POST /events` ingress。
+- runtime descriptor 写入、token、端口发现。
+- debug CLI / Codex wrapper。
+- 前端 renderer 状态订阅和完整状态展示。
+
 ## 手测步骤
 
 1. 打开常用编辑器或终端并保持输入焦点。
