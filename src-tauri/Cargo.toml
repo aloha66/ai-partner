@@ -1,0 +1,28 @@
+[package]
+name = "ai-partner"
+version = "0.1.0"
+description = "AI desktop partner M0 window spike"
+authors = ["ai-partner contributors"]
+edition = "2021"
+
+[lib]
+name = "ai_partner_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "ai-partner"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = ["macos-private-api"] }
+
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-global-shortcut = "2"
+
+[dev-dependencies]
+jsonschema = "0.46"

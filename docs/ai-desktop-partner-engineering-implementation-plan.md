@@ -700,6 +700,8 @@ MVP v1 runtime limits:
 
 目标：先验证桌面壳和冻结协议。
 
+Status 2026-06-03：M0 window spike acceptance 已通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均有验证记录；contracts/schema/fixtures 已在 `packages/contracts/` 建立并通过 TS/Rust fixture tests。
+
 Tasks:
 
 - 创建 Tauri v2 + React + TypeScript + Rust 项目骨架。

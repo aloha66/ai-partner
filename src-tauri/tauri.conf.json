@@ -1,0 +1,45 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "AI Partner",
+  "version": "0.1.0",
+  "identifier": "com.ailoha.aipartner",
+  "build": {
+    "beforeDevCommand": "pnpm --filter @ai-partner/frontend dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "pnpm --filter @ai-partner/frontend build",
+    "frontendDist": "../frontend/dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "security": {
+      "capabilities": ["m0-window-spike"]
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "AI Partner M0",
+        "url": "index.html",
+        "width": 520,
+        "height": 360,
+        "minWidth": 380,
+        "minHeight": 300,
+        "transparent": true,
+        "decorations": false,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "focus": false,
+        "focusable": false,
+        "resizable": false,
+        "skipTaskbar": true,
+        "visibleOnAllWorkspaces": false,
+        "backgroundColor": "#00000000"
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg"],
+    "category": "DeveloperTool",
+    "shortDescription": "AI workflow status companion"
+  }
+}
