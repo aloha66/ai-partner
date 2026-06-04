@@ -1,12 +1,15 @@
 use serde::Serialize;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
+mod ingress;
 mod state;
 
 use state::{
     PartnerStateSnapshot, PartnerStateStore, WorkflowEventWire, PARTNER_STATE_CHANGED_EVENT,
 };
+
+const CLICK_THROUGH_RESTORED_EVENT: &str = "click-through-restored";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +37,12 @@ fn m0_window_spike_status() -> M0WindowSpikeStatus {
 #[tauri::command]
 fn enter_click_through_for_ms(window: tauri::Window, duration_ms: u64) -> Result<(), String> {
     window
+        .set_focusable(false)
+        .map_err(|error| error.to_string())?;
+    window
+        .set_always_on_top(true)
+        .map_err(|error| error.to_string())?;
+    window
         .set_ignore_cursor_events(true)
         .map_err(|error| error.to_string())?;
 
@@ -44,6 +53,7 @@ fn enter_click_through_for_ms(window: tauri::Window, duration_ms: u64) -> Result
         let _ = recovery_window.set_focusable(false);
         let _ = recovery_window.set_always_on_top(true);
         let _ = recovery_window.show();
+        let _ = recovery_window.emit(CLICK_THROUGH_RESTORED_EVENT, ());
     });
 
     Ok(())
@@ -87,7 +97,23 @@ fn emit_state_transition(
     store: &PartnerStateStore,
     transition: &state::StateTransition,
 ) {
-    if transition.should_emit {
+    publish_state_transition(
+        app,
+        store,
+        transition,
+        transition.should_emit,
+        transition.should_emit,
+    );
+}
+
+pub(crate) fn publish_state_transition(
+    app: &AppHandle,
+    store: &PartnerStateStore,
+    transition: &state::StateTransition,
+    should_emit: bool,
+    should_emit_timer: bool,
+) {
+    if should_emit {
         let _ = app.emit(PARTNER_STATE_CHANGED_EVENT, transition.snapshot.clone());
     }
 
@@ -97,7 +123,9 @@ fn emit_state_transition(
         tauri::async_runtime::spawn_blocking(move || {
             std::thread::sleep(store.done_idle_after());
             if let Some(snapshot) = store.complete_done_idle_timer(timer) {
-                let _ = app.emit(PARTNER_STATE_CHANGED_EVENT, snapshot);
+                if should_emit_timer {
+                    let _ = app.emit(PARTNER_STATE_CHANGED_EVENT, snapshot);
+                }
             }
         });
     }
@@ -123,6 +151,10 @@ pub fn run() {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             app.handle()
                 .plugin(tauri_plugin_global_shortcut::Builder::new().build())?;
+
+            let store = app.state::<PartnerStateStore>().inner().clone();
+            let ingress = ingress::start_local_ingress(app.handle().clone(), store)?;
+            app.manage(ingress);
 
             Ok(())
         });

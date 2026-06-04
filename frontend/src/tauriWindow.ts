@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { PartnerStateSnapshot } from "@ai-partner/contracts";
 import {
   isRegistered,
   register,
@@ -20,6 +22,8 @@ const SHORTCUT_LABELS: Record<string, string> = {
 };
 export const CLICK_THROUGH_RECOVERY_SHORTCUT =
   "auto restore / shortcut";
+export const PARTNER_STATE_CHANGED_EVENT = "partner-state-changed";
+export const CLICK_THROUGH_RESTORED_EVENT = "click-through-restored";
 
 export interface SpikeStatus {
   transparent: string;
@@ -30,8 +34,44 @@ export interface SpikeStatus {
   clickThroughRecovery: string;
 }
 
+export interface StateCommandResult {
+  snapshot: PartnerStateSnapshot;
+  usedFallback: boolean;
+  error?: string;
+}
+
 export async function getSpikeStatus(): Promise<SpikeStatus> {
   return invoke<SpikeStatus>("m0_window_spike_status");
+}
+
+export async function getCurrentState(): Promise<PartnerStateSnapshot> {
+  return invoke<PartnerStateSnapshot>("get_current_state");
+}
+
+export async function listenPartnerStateChanged(
+  onSnapshot: (snapshot: PartnerStateSnapshot) => void
+): Promise<UnlistenFn> {
+  return listen<PartnerStateSnapshot>(PARTNER_STATE_CHANGED_EVENT, (event) => {
+    onSnapshot(event.payload);
+  });
+}
+
+export async function listenClickThroughRestored(
+  onRestored: () => void
+): Promise<UnlistenFn> {
+  return listen(CLICK_THROUGH_RESTORED_EVENT, onRestored);
+}
+
+export async function pausePartner(): Promise<StateCommandResult> {
+  return invokeStateCommandWithFallback("pause");
+}
+
+export async function resumePartner(): Promise<StateCommandResult> {
+  return invokeStateCommandWithFallback("resume");
+}
+
+export async function clearPartnerError(): Promise<StateCommandResult> {
+  return invokeStateCommandWithFallback("clear_error");
 }
 
 export async function applyM0WindowDefaults(): Promise<void> {
@@ -42,6 +82,21 @@ export async function applyM0WindowDefaults(): Promise<void> {
     window.setFocusable(false),
     window.setVisibleOnAllWorkspaces(false)
   ]);
+}
+
+async function invokeStateCommandWithFallback(command: string): Promise<StateCommandResult> {
+  try {
+    return {
+      snapshot: await invoke<PartnerStateSnapshot>(command),
+      usedFallback: false
+    };
+  } catch (error) {
+    return {
+      snapshot: await getCurrentState(),
+      usedFallback: true,
+      error: String(error)
+    };
+  }
 }
 
 export async function moveWindowTo(x: number, y: number): Promise<void> {

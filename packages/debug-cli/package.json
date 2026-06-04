@@ -1,0 +1,25 @@
+{
+  "name": "@ai-partner/debug-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "ai-partner-debug": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "debug:discover": "pnpm run build && node dist/cli.js discover",
+    "debug:send": "pnpm run build && node dist/cli.js send",
+    "debug:sequence": "pnpm run build && node dist/cli.js sequence",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-partner/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  }
+}

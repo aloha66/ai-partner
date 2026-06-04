@@ -27,7 +27,7 @@ pub enum WorkflowSource {
     DemoScript,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkflowEventWire {
     #[serde(rename = "schemaVersion")]
@@ -270,7 +270,7 @@ impl PartnerStateSnapshot {
 }
 
 impl WorkflowEventWire {
-    fn validate(&self) -> Result<(), String> {
+    pub(crate) fn validate(&self) -> Result<(), String> {
         if self.schema_version != WORKFLOW_EVENT_SCHEMA_VERSION {
             return Err("unsupported workflow event schemaVersion".to_string());
         }

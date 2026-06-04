@@ -259,7 +259,7 @@ Pass/fail:
 | 透明无边框 | macOS 可显示透明背景，无明显黑边 | 调整 Tauri config；若不可修复，重评 Electron |
 | 不抢焦点 | 打字中的 app 不被 companion 抢焦点 | 降级为 focusable false / quiet mode；仍失败则重评窗口方案 |
 | 拖动互动 | 伴侣可拖动，workflow bubble 不丢 | 使用自管位置更新替代 `startDragging()` |
-| Click-through 恢复 | 安静穿透模式可通过托盘/快捷键恢复 | 若不可恢复，MVP 不启用 click-through |
+| Click-through 恢复 | 安静穿透模式可通过后端自动恢复或已注册快捷键恢复 | 若不可恢复，MVP 不启用 click-through |
 | Spaces/fullscreen | 不破坏全屏/Spaces 基础工作流 | 记录限制并默认不覆盖全屏 |
 | CSS sprite | frame 对齐、透明边缘、bubble 不重叠 | 修 renderer，不能带着抖动进入 M1 |
 
@@ -383,16 +383,16 @@ CODE PATHS                                             USER FLOWS
   └── [DONE] snake_case <-> camelCase boundary
 
 [+] Runtime descriptor                                 [+] Codex run visible on desktop
-  ├── [GAP] atomic write + 0600 permissions               ├── [GAP] [->E2E] running -> reading -> editing -> done
-  ├── [GAP] stale pid/port rejected                       ├── [GAP] waiting requires user attention
-  ├── [GAP] token rotation                                ├── [GAP] error is visible and clearable
-  └── [GAP] wrapper discover failure UX                   └── [GAP] pause prevents event spam on resume
+  ├── [DONE] atomic write + 0600 permissions              ├── [DONE] [->E2E] running -> reading -> editing -> done
+  ├── [DONE] stale pid/port rejected                      ├── [DONE] waiting requires user attention
+  ├── [GAP] token rotation                                ├── [DONE] error is visible and clearable
+  └── [GAP] wrapper discover failure UX                   └── [DONE] pause prevents event spam on resume
 
 [+] Rust ingress + state store                         [+] Drag and physical interaction
-  ├── [GAP] auth/localhost/CORS/origin                    ├── [GAP] carried -> struggling -> falling -> recovering
-  ├── [GAP] payload 4KB + forbidden fields                ├── [GAP] [->E2E] waiting bubble survives drag
-  ├── [GAP] duplicate event id + TTL/LRU                  └── [GAP] done body celebration expires after 5s
-  ├── [GAP] 10 events/s burst 30 rate budget
+  ├── [DONE] auth/localhost/CORS/origin                   ├── [GAP] carried -> struggling -> falling -> recovering
+  ├── [DONE] payload 4KB + forbidden fields               ├── [GAP] [->E2E] waiting bubble survives drag
+  ├── [DONE] duplicate event id + TTL/LRU                 └── [GAP] done body celebration expires after 5s
+  ├── [DONE] 10 events/s burst 30 rate budget
   ├── [DONE] message newline/length rejection
   ├── [DONE] activeRunId arbitration
   ├── [DONE] done -> idle after 3s
@@ -400,9 +400,9 @@ CODE PATHS                                             USER FLOWS
   └── [DONE] get_current_state/pause/resume/clear_error
 
 [+] Tauri bridge + renderer                            [+] Partner selection
-  ├── [PARTIAL] state event emitted by Rust               ├── [GAP] corrupt asset shows default partner
-  ├── [GAP] renderer subscription pulls current snapshot  ├── [GAP] search/switch local partner
-  ├── [GAP] CSS frame + bubble/source badge visual        └── [GAP] exit requires confirmation
+  ├── [DONE] state event emitted by Rust                  ├── [GAP] corrupt asset shows default partner
+  ├── [DONE] renderer subscription pulls current snapshot ├── [GAP] search/switch local partner
+  ├── [DONE] minimal bubble/source/status visual          └── [GAP] exit requires confirmation
   ├── [GAP] physicalStateMachine reducer
   └── [DONE] M0 integer scale/frame alignment
 
@@ -431,7 +431,7 @@ CODE PATHS                                             USER FLOWS
 
 LLM integration: [NOT MVP] [->EVAL] only when opt-in LLM or memory ships
 
-COVERAGE NOW: M0 + contracts + minimal Rust State Bridge paths are tested; ingress, descriptor runtime behavior, renderer, resolver, assets, wrapper and packaging remain planned gaps
+COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription are tested; resolver, assets, wrapper and packaging remain planned gaps
 TARGET: 60/60 planned before MVP acceptance
 QUALITY TARGET: contracts/security/resolver/assets/wrapper need behavior + edge + error tests
 ```
@@ -721,39 +721,42 @@ Acceptance:
 
 目标：外部事件进来，Rust 变成状态快照。
 
-Status 2026-06-03：已完成并复核最小内存 State Bridge 第一片：Rust `PartnerStateStore`、Tauri commands（`get_current_state`、`apply_workflow_event`、`pause`、`resume`、`clear_error`）、`partner-state-changed` event emit、done -> idle timer、active run 仲裁、pause/resume、error clear、schema/id/timestamp/message/code-context 校验和 stale timestamp 拒绝。Rust tests 已覆盖这些最小状态桥边界。尚未实现 localhost ingress、runtime descriptor、debug CLI、Codex wrapper、完整 renderer 或完整 asset loader。
+Status 2026-06-03：已完成并复核 M1 的三片最小闭环：第一片是 Rust `PartnerStateStore`、Tauri commands（`get_current_state`、`apply_workflow_event`、`pause`、`resume`、`clear_error`）、`partner-state-changed` event emit、done -> idle timer、active run 仲裁、pause/resume、error clear、schema/id/timestamp/message/code-context 校验和 stale timestamp 拒绝；第二片是 localhost `POST /events` ingress + runtime descriptor；第三片是本地 debug sender/discovery。Ingress 只绑定 `127.0.0.1`，启动时生成 session bearer token 并写入 `${TMPDIR}/ai-partner/runtime-descriptor.json`，descriptor 使用临时文件 + rename 原子写入、Unix owner-only 权限、stale cleanup 和退出删除。Ingress gate 已覆盖 bearer auth、payload 4KB、字段白名单、forbidden fields、`code_context_allowed=false`、message 160 字/无换行、CORS preflight / `Origin` 拒绝、event id TTL/LRU 去重、per-run 300ms debounce、per-run 10 events/s burst 30 rate budget；超预算或 debounce 命中的事件仍作为 latest safe snapshot 写入 store，并通过 trailing flush 推送最新安全快照。`packages/debug-cli/` 已读取 runtime descriptor、校验 freshness、用 bearer token 发送 `cli` 来源的 `WorkflowEvent`，覆盖 `running/reading/editing/waiting/error/done`，并拒绝 code/diff/prompt/file content 等 code-context 输入。尚未实现 Codex wrapper、完整 renderer、animation resolver 或完整 asset loader。
 
 Tasks:
 
-- `POST /events` 只监听 `127.0.0.1`。
-- runtime token 认证。
-- Runtime descriptor 原子写入、权限、stale cleanup。
-- schema validation、白名单、payload 4KB、forbidden fields。（最小 State Bridge 已做 Rust command 入参的 schemaVersion/id/timestamp/message/code_context_allowed 校验；完整 ingress 仍需 JSON Schema/payload/security gate。）
-- CORS/origin reject。
-- event id 去重，TTL/LRU。（未做，留给 ingress slice。）
-- Per-run 300ms debounce。
-- Per-run 10 events/s、burst 30 rate limit。
+- `POST /events` 只监听 `127.0.0.1`。（已做）
+- runtime token 认证。（已做）
+- Runtime descriptor 原子写入、权限、stale cleanup。（已做；debug CLI discovery 已做，Codex wrapper 读取留给后续）
+- schema validation、白名单、payload 4KB、forbidden fields。（已做 ingress gate + store 二次校验）
+- CORS/origin reject。（已做）
+- event id 去重，TTL/LRU。（已做）
+- Per-run 300ms debounce。（已做）
+- Per-run 10 events/s、burst 30 rate limit。（已做，超预算会更新 latest safe snapshot 并 trailing flush）
 - `activeRunId` 仲裁。（最小 State Bridge 已做。）
 - Soft pause latest safe snapshot。（最小 State Bridge 已做。）
 - `get_current_state`、`pause`、`resume`、`clear_error` commands。（最小 State Bridge 已做。）
 - Rust 管 workflow `done -> idle` timer。（最小 State Bridge 已做，pause/resume 不取消 timer。）
 - Tauri event 推送 `PartnerStateSnapshot`。（最小 State Bridge 已做。）
+- 本地 debug sender 读取 descriptor 并发送 `running/reading/editing/waiting/error/done`。（已做；不含 Codex wrapper）
 
 Acceptance:
 
-- Rust tests 覆盖 security、descriptor、state transition、active run、pause/resume 和 rate budget。（当前仅 state transition / active run / pause-resume / done timer / command payload privacy validation 已覆盖；descriptor、auth、payload limit、dedupe、rate budget 仍待完整 ingress slice。）
-- CLI 能发出所有 workflow 状态。
+- Rust tests 覆盖 security、descriptor、state transition、active run、pause/resume 和 rate budget。（已覆盖 M1 当前片：descriptor 写入/权限/清理、stale cleanup、auth、payload limit、origin/CORS、forbidden/unknown fields、dedupe TTL/LRU、debounce、rate budget、pause latest snapshot、state transition。）
+- CLI 能发出所有 workflow 状态。（已做最小 debug sender：`pnpm debug:send <state>` / `pnpm debug:sequence` 覆盖 `running/reading/editing/waiting/error/done`。）
 
 ### M2: Frontend Partner Window
 
 目标：renderer 显示状态，不负责外部连接。
 
+Status 2026-06-05：已完成 M2 最小前端状态订阅 slice，并做过 live verification/follow-up。Renderer 启动时调用 `get_current_state`，订阅 Tauri `partner-state-changed` event，在现有 M0 窗口 UI 内显示 workflow state、source、message、paused 和 connection，并把 pause/resume/clear_error 接到前端按钮。`pnpm debug:send running/reading/editing/waiting/error/done`、`pnpm debug:sequence`、pause/resume latest snapshot、error clear、`done -> idle` 均已在本机 Tauri dev app 中复测。默认 520x360 下新增状态区初测裁切 runtime strip，已小幅压缩面板和 companion 尺寸后复测可见。Click-through 在 M0 人工验收仍为通过；M2 follow-up 在干净启动下确认默认布局和不抢焦点，补了入口 `pointerdown` / `mousedown` 触发、按钮 `aria-label`、后端恢复事件 `click-through-restored` 和 renderer 清 banner 闭环。当前 macOS automation 点击/截图路径仍会出现 WebView click 不触发或黑屏，真实物理点击落到底层 app 需要用户在干净 GUI 会话中最后手动确认。尚未进入 animation resolver、asset loader、Codex wrapper、右键菜单、partner selection 或完整 physical reducer。
+
 Tasks:
 
-- 订阅 Tauri state event。
-- 启动和恢复时调用 `get_current_state`。
+- 订阅 Tauri state event。（已完成最小 slice）
+- 启动和恢复时调用 `get_current_state`。（已完成最小 slice；resume command 返回 snapshot 后直接更新 UI）
 - CSS/DOM sprite renderer。
-- bubble/status/source badge overlay。
+- bubble/status/source badge overlay。（已完成最小 workflow/source/status 展示）
 - `physicalStateMachine` / reducer。
 - drag pointer 坐标用 ref + rAF + CSS transform。
 - 右键菜单：暂停、恢复、切换伴侣、退出确认。
@@ -761,9 +764,10 @@ Tasks:
 
 Acceptance:
 
-- Mock snapshot 能驱动伴侣状态变化。
+- Mock snapshot 能驱动伴侣状态变化。（已由 M2 state bridge/view-model tests 覆盖）
 - 拖动不丢 workflow bubble。
 - Renderer 不因 pointermove 每帧重跑 resolver。
+- Live verification：debug CLI 能驱动最小 workflow/status/source/message/paused/connection UI。（已通过；click-through 入口/恢复已小修并通过自动门禁，真实物理点击落到底层 app 需用户干净 GUI 手动确认）
 
 ### M3: Resolver and Asset Loader
 
@@ -933,14 +937,16 @@ Synthesized from this review's findings. Each task derives from a specific findi
   - Surfaced by: Code Quality Q2, Test Review
   - Files: `packages/contracts/`
   - Verify: schema fixture tests in TS and Rust
-- [ ] **T3 (P1, human: ~3h / CC: ~20 min)** - Runtime descriptor - Implement app endpoint bootstrap for wrapper/CLI
+- [x] **T3 (P1, human: ~3h / CC: ~20 min)** - Runtime descriptor - Implement app endpoint bootstrap for wrapper/CLI
   - Surfaced by: Architecture Review A5
   - Files: `packages/contracts/`, `src-tauri/`, `scripts/` or `cli/`
   - Verify: descriptor atomic write, permission, stale cleanup and discover failure tests
-- [ ] **T4 (P1, human: ~1 day / CC: ~45 min)** - Rust bridge - Build secure localhost event ingress and state store
+  - Status: M1 app-side descriptor bootstrap done in `src-tauri`; debug CLI discovery done in `packages/debug-cli`; wrapper discovery remains intentionally out of this slice.
+- [x] **T4 (P1, human: ~1 day / CC: ~45 min)** - Rust bridge - Build secure localhost event ingress and state store
   - Surfaced by: Architecture Review A4/A6/A7, Performance P1
   - Files: `src-tauri/`
   - Verify: `cargo test` for auth, rate limit, active run, pause/resume, timers
+  - Status: M1 secure localhost ingress + state store done; renderer subscription remains M2.
 - [ ] **T5 (P1, human: ~1 day / CC: ~45 min)** - Resolver - Implement pure TypeScript animation resolver
   - Surfaced by: Architecture Review A3, Code Quality Q1/Q3/Q5
   - Files: `packages/resolver/` or `frontend/`
@@ -957,6 +963,7 @@ Synthesized from this review's findings. Each task derives from a specific findi
   - Surfaced by: Code Quality Q3, Performance P2/P5
   - Files: `frontend/`
   - Verify: component tests + screenshot sanity + integer scale checks
+  - Status: M2 minimal state subscription and workflow/source/status display done and live-verified; full renderer/resolver/asset-driven visuals remain open. Click-through entry/restore received a bounded reliability fix after M2 layout additions; final physical click-through confirmation remains a clean GUI manual check.
 - [ ] **T9 (P1, human: ~1 day / CC: ~45 min)** - Codex wrapper - Emit real workflow events without code content
   - Surfaced by: Architecture Review A4, Test Review, Outside Voice
   - Files: `scripts/`, `cli/` or `src-tauri/`

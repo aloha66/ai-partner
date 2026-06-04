@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownToLine,
+  CirclePause,
+  CirclePlay,
+  CircleX,
   Focus,
   Layers2,
   MousePointer2,
@@ -11,15 +14,26 @@ import {
 import {
   CLICK_THROUGH_RECOVERY_SHORTCUT,
   applyM0WindowDefaults,
+  clearPartnerError,
   currentCursorPosition,
   currentWindowPosition,
   enterClickThrough,
+  getCurrentState,
   getSpikeStatus,
   leaveClickThrough,
+  listenClickThroughRestored,
+  listenPartnerStateChanged,
   moveWindowTo,
+  pausePartner,
   registerClickThroughRecovery,
+  resumePartner,
+  type StateCommandResult,
   type SpikeStatus
 } from "./tauriWindow";
+import {
+  idlePartnerState,
+  partnerStateDisplay
+} from "./partnerStateView";
 import { buildProbeAtlasDataUrl, spriteFrame } from "./spriteProbe";
 import "./styles.css";
 
@@ -50,7 +64,8 @@ const statusLabels: Partial<Record<keyof SpikeStatus, Record<string, string>>> =
     "visibleOnAllWorkspaces:false": "normal only"
   },
   clickThroughRecovery: {
-    "global shortcut": "shortcut"
+    "global shortcut": "shortcut",
+    "backend auto restore": "auto 6s"
   }
 };
 
@@ -63,17 +78,22 @@ export function App() {
   const [status, setStatus] = useState<SpikeStatus | null>(null);
   const [clickThrough, setClickThrough] = useState(false);
   const [recoveryStatus, setRecoveryStatus] = useState(CLICK_THROUGH_RECOVERY_SHORTCUT);
+  const [partnerState, setPartnerState] = useState(idlePartnerState);
+  const [stateCommandStatus, setStateCommandStatus] = useState("state controls ready");
   const recoveryTimerRef = useRef<number | null>(null);
   const [frameIndex, setFrameIndex] = useState(0);
   const [dragging, setDragging] = useState(false);
   const dragRef = useRef<DragState | null>(null);
+  const stateRevisionRef = useRef(0);
   const probeAtlas = useMemo(() => buildProbeAtlasDataUrl(), []);
   const frame = spriteFrame("review", frameIndex);
+  const stateDisplay = partnerStateDisplay(partnerState);
 
   useEffect(() => {
-    let cleanup: (() => void) | undefined;
+    let shortcutCleanup: (() => void) | undefined;
+    let restoreCleanup: (() => void) | undefined;
 
-    function recoverClickThrough() {
+    function clearClickThroughState() {
       if (recoveryTimerRef.current !== null) {
         window.clearTimeout(recoveryTimerRef.current);
         recoveryTimerRef.current = null;
@@ -83,9 +103,9 @@ export function App() {
 
     applyM0WindowDefaults().catch(() => undefined);
     getSpikeStatus().then(setStatus).catch(() => undefined);
-    registerClickThroughRecovery(recoverClickThrough)
+    registerClickThroughRecovery(clearClickThroughState)
       .then((registration) => {
-        cleanup = registration.cleanup;
+        shortcutCleanup = registration.cleanup;
         setRecoveryStatus(
           registration.shortcuts.length > 0
             ? `shortcut: ${registration.shortcuts.join(" / ")}`
@@ -93,11 +113,58 @@ export function App() {
         );
       })
       .catch((error) => setRecoveryStatus(`auto restore only (${String(error)})`));
+    listenClickThroughRestored(clearClickThroughState)
+      .then((unlisten) => {
+        restoreCleanup = unlisten;
+      })
+      .catch(() => undefined);
 
     return () => {
       if (recoveryTimerRef.current !== null) {
         window.clearTimeout(recoveryTimerRef.current);
       }
+      shortcutCleanup?.();
+      restoreCleanup?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    let cleanup: (() => void) | undefined;
+    const startupRevision = stateRevisionRef.current;
+
+    void (async () => {
+      try {
+        const unlisten = await listenPartnerStateChanged((snapshot) => {
+          if (!disposed) {
+            stateRevisionRef.current += 1;
+            setPartnerState(snapshot);
+            setStateCommandStatus("state event received");
+          }
+        });
+        if (disposed) {
+          unlisten();
+        } else {
+          cleanup = unlisten;
+        }
+      } catch {
+        // Startup snapshot still gives the renderer a usable baseline.
+      }
+
+      try {
+        const snapshot = await getCurrentState();
+        if (!disposed && stateRevisionRef.current === startupRevision) {
+          stateRevisionRef.current += 1;
+          setPartnerState(snapshot);
+          setStateCommandStatus("startup snapshot loaded");
+        }
+      } catch {
+        // Keep the local idle fallback if Tauri is not ready yet.
+      }
+    })();
+
+    return () => {
+      disposed = true;
       cleanup?.();
     };
   }, []);
@@ -164,21 +231,48 @@ export function App() {
   }
 
   async function toggleClickThrough() {
+    if (recoveryTimerRef.current !== null) {
+      return;
+    }
+
+    setClickThrough(true);
+    setRecoveryStatus((value) => `${value}; auto in 6s`);
+    recoveryTimerRef.current = window.setTimeout(() => {
+      recoveryTimerRef.current = null;
+      leaveClickThrough()
+        .then(() => setClickThrough(false))
+        .catch(() => setRecoveryStatus("auto restore failed"));
+      }, 6000);
+
     try {
+      await new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => resolve());
+        });
+      });
       await enterClickThrough();
-      setClickThrough(true);
-      setRecoveryStatus((value) => `${value}; auto in 6s`);
+    } catch {
       if (recoveryTimerRef.current !== null) {
         window.clearTimeout(recoveryTimerRef.current);
-      }
-      recoveryTimerRef.current = window.setTimeout(() => {
         recoveryTimerRef.current = null;
-        leaveClickThrough()
-          .then(() => setClickThrough(false))
-          .catch(() => setRecoveryStatus("auto restore failed"));
-      }, 6000);
-    } catch {
+      }
+      setClickThrough(false);
       setRecoveryStatus("click-through failed");
+    }
+  }
+
+  async function applyStateCommand(command: () => Promise<StateCommandResult>) {
+    try {
+      const result = await command();
+      stateRevisionRef.current += 1;
+      setPartnerState(result.snapshot);
+      setStateCommandStatus(
+        result.usedFallback
+          ? `command fallback: ${result.error ?? "unknown error"}`
+          : "command applied"
+      );
+    } catch (error) {
+      setStateCommandStatus(`command failed: ${String(error)}`);
     }
   }
 
@@ -186,8 +280,8 @@ export function App() {
     <main className="window-spike">
       <section className="companion-zone" aria-label="M0 window spike">
         <div className="bubble">
-          <span>reading</span>
-          <strong>正在读取项目内容</strong>
+          <span>{stateDisplay.workflowLabel}</span>
+          <strong>{stateDisplay.message}</strong>
         </div>
 
         <div
@@ -237,7 +331,16 @@ export function App() {
           <button
             className="icon-button"
             title="进入点击穿透"
+            aria-label="进入点击穿透"
             type="button"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              void toggleClickThrough();
+            }}
+            onMouseDown={(event) => {
+              event.preventDefault();
+              void toggleClickThrough();
+            }}
             onClick={() => void toggleClickThrough()}
           >
             <MousePointer2 size={18} aria-hidden />
@@ -260,10 +363,61 @@ export function App() {
           </button>
         </div>
 
+        <div className="state-card" aria-label="workflow state">
+          <div className="state-row">
+            <span>workflow</span>
+            <strong>{stateDisplay.workflowLabel}</strong>
+            <span>source</span>
+            <strong>{stateDisplay.sourceLabel}</strong>
+          </div>
+          <div className="state-row state-row-wide">
+            <span>message</span>
+            <strong>{stateDisplay.message}</strong>
+          </div>
+          <div className="state-row">
+            <span>paused</span>
+            <strong>{stateDisplay.pausedLabel}</strong>
+            <span>connection</span>
+            <strong>{stateDisplay.connectionLabel}</strong>
+          </div>
+        </div>
+
+        <div className="toolbar state-toolbar" aria-label="state controls">
+          <button
+            className="icon-button"
+            title="暂停 workflow 状态推送"
+            type="button"
+            disabled={!stateDisplay.canPause}
+            onClick={() => void applyStateCommand(pausePartner)}
+          >
+            <CirclePause size={18} aria-hidden />
+          </button>
+          <button
+            className="icon-button"
+            title="恢复 workflow 状态推送"
+            type="button"
+            disabled={!stateDisplay.canResume}
+            onClick={() => void applyStateCommand(resumePartner)}
+          >
+            <CirclePlay size={18} aria-hidden />
+          </button>
+          <button
+            className="icon-button"
+            title="清除错误状态"
+            type="button"
+            disabled={!stateDisplay.canClearError}
+            onClick={() => void applyStateCommand(clearPartnerError)}
+          >
+            <CircleX size={18} aria-hidden />
+          </button>
+        </div>
+
         <div className="runtime-strip">
           <Move size={14} aria-hidden />
           <span>{dragging ? "managed drag" : "sprite probe"}</span>
           <ArrowDownToLine size={14} aria-hidden />
+          <span>{stateDisplay.runLabel}</span>
+          <span>{stateCommandStatus}</span>
           <span>{recoveryStatus}</span>
         </div>
 
