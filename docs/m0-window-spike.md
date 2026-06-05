@@ -14,7 +14,7 @@
 | 置顶 | `src-tauri/tauri.conf.json` + `frontend/src/tauriWindow.ts` | 通过 | 2026-06-03 截图验证窗口覆盖在 Codex 上方；启动配置和运行时 `setAlwaysOnTop(true)` |
 | 不抢焦点 | `src-tauri/tauri.conf.json` + `src-tauri/src/lib.rs` + `frontend/src/tauriWindow.ts` | 通过 | 初测前台被 `ai-partner` 激活；已加 `ActivationPolicy::Accessory` 降级修正。2026-06-03 复测 `osascript` 显示前台仍为 Codex |
 | 拖动 | `frontend/src/App.tsx` + `frontend/src/tauriWindow.ts` | 通过 | 2026-06-03 人工初测发现拖动位置明显漂移；已改为 Tauri 物理 cursor position + 物理 window position 同源计算。人工复测确认拖动通过 |
-| Click-through 恢复 | `src-tauri/src/lib.rs` + `frontend/src/tauriWindow.ts` + `frontend/src/App.tsx` | 通过 | 2026-06-03 M0 人工复测确认进入 click-through 后 UI 不再接收点击，6 秒后后端自动恢复正常；2026-06-05 M2 clean GUI 复核完成布局/入口小修/恢复闭环，真实物理点击落到底层 app 仍需用户在干净 GUI 会话中最后确认 |
+| Click-through 恢复 | `src-tauri/src/lib.rs` + `frontend/src/tauriWindow.ts` + `frontend/src/App.tsx` | 通过 | 2026-06-03 M0 人工复测确认进入 click-through 后 UI 不再接收点击，6 秒后后端自动恢复正常；2026-06-05 M2 clean GUI 复核完成布局/入口小修/恢复闭环，用户真实物理复核确认点击可落到底层 app，6 秒后恢复且 AI Partner 可再次点击 |
 | Spaces/fullscreen | `src-tauri/tauri.conf.json` | 通过 | 2026-06-03 人工复测确认普通 Space 可见可用、fullscreen Space 不覆盖、回普通桌面后窗口仍可用；默认 `visibleOnAllWorkspaces: false` 符合 M0 预期 |
 | CSS sprite frame alignment | `frontend/src/spriteProbe.ts` | 通过 | 单元测试覆盖 Petdex 1536x1872 / 192x208 / 8x9 探针；2026-06-03 截图显示 `review:n` frame 无半格偏移 |
 
@@ -75,7 +75,8 @@ pnpm tauri:dev
 - 前台应用为 Chrome click target，AI Partner 仍置顶但不抢焦点；`osascript` 读取窗口为 `520x360`。
 - 自动化坐标点击、AX `click` 和 `AXPress` 均能命中/命名 `进入点击穿透` 按钮，但在当前 macOS automation 会话中没有把 `click` 交给 Tauri WebView；随后 HID/CGEvent 截图路径再次出现黑屏，不能作为真实物理手点等价证据。
 - 已做限定小修：click-through 按钮增加 `aria-label`，在 `pointerdown` / `mousedown` 即启动穿透并用恢复 timer 防重入；Rust `enter_click_through_for_ms` 进入时重申 `focusable(false)` / `always_on_top(true)`，6 秒后恢复时 emit `click-through-restored`，renderer 监听后清理 banner/timer。
-- 小修后 `pnpm --filter @ai-partner/frontend typecheck`、`pnpm --filter @ai-partner/frontend test`、`cargo test --manifest-path src-tauri/Cargo.toml` 通过。真实物理点击落到底层 app 的最后一步仍需用户在干净 GUI 会话中手动点鼠标图标确认。
+- 小修后 `pnpm --filter @ai-partner/frontend typecheck`、`pnpm --filter @ai-partner/frontend test`、`cargo test --manifest-path src-tauri/Cargo.toml` 通过。
+- 用户真实物理 click-through 复核通过：点鼠标图标后 banner 显示，点击可落到底层 app，等待 6 秒后自动恢复，恢复后 AI Partner 可再次点击。
 
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
 

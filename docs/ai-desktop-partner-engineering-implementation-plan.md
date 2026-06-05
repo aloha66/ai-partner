@@ -409,7 +409,7 @@ CODE PATHS                                             USER FLOWS
 [+] TypeScript resolver                                [+] Desktop shell
   ├── [GAP] workflow normal mappings                      ├── [GAP] [->E2E/manual] transparent window
   ├── [GAP] physical body override                        ├── [GAP] [->E2E/manual] always on top behavior
-  ├── [GAP] waiting/error bubble priority                 ├── [GAP] click-through quiet mode can recover
+  ├── [GAP] waiting/error bubble priority                 ├── [DONE] click-through quiet mode can recover
   ├── [GAP] done queued under physical                    └── [GAP] multi-display/high-DPI sanity
   └── [GAP] extension -> legacy -> procedural fallback
 
@@ -749,7 +749,7 @@ Acceptance:
 
 目标：renderer 显示状态，不负责外部连接。
 
-Status 2026-06-05：已完成 M2 最小前端状态订阅 slice，并做过 live verification/follow-up。Renderer 启动时调用 `get_current_state`，订阅 Tauri `partner-state-changed` event，在现有 M0 窗口 UI 内显示 workflow state、source、message、paused 和 connection，并把 pause/resume/clear_error 接到前端按钮。`pnpm debug:send running/reading/editing/waiting/error/done`、`pnpm debug:sequence`、pause/resume latest snapshot、error clear、`done -> idle` 均已在本机 Tauri dev app 中复测。默认 520x360 下新增状态区初测裁切 runtime strip，已小幅压缩面板和 companion 尺寸后复测可见。Click-through 在 M0 人工验收仍为通过；M2 follow-up 在干净启动下确认默认布局和不抢焦点，补了入口 `pointerdown` / `mousedown` 触发、按钮 `aria-label`、后端恢复事件 `click-through-restored` 和 renderer 清 banner 闭环。当前 macOS automation 点击/截图路径仍会出现 WebView click 不触发或黑屏，真实物理点击落到底层 app 需要用户在干净 GUI 会话中最后手动确认。尚未进入 animation resolver、asset loader、Codex wrapper、右键菜单、partner selection 或完整 physical reducer。
+Status 2026-06-05：已完成 M2 最小前端状态订阅 slice，并做过 live verification/follow-up。Renderer 启动时调用 `get_current_state`，订阅 Tauri `partner-state-changed` event，在现有 M0 窗口 UI 内显示 workflow state、source、message、paused 和 connection，并把 pause/resume/clear_error 接到前端按钮。`pnpm debug:send running/reading/editing/waiting/error/done`、`pnpm debug:sequence`、pause/resume latest snapshot、error clear、`done -> idle` 均已在本机 Tauri dev app 中复测。默认 520x360 下新增状态区初测裁切 runtime strip，已小幅压缩面板和 companion 尺寸后复测可见。Click-through 在 M0 人工验收仍为通过；M2 follow-up 在干净启动下确认默认布局和不抢焦点，补了入口 `pointerdown` / `mousedown` 触发、按钮 `aria-label`、后端恢复事件 `click-through-restored` 和 renderer 清 banner 闭环。当前 macOS automation 点击/截图路径仍会出现 WebView click 不触发或黑屏，不能作为真实物理手点等价证据；用户已在干净 GUI 会话中真实物理复核通过：banner 显示、点击落到底层 app、6 秒后恢复，恢复后 AI Partner 可再次点击。尚未进入 animation resolver、asset loader、Codex wrapper、右键菜单、partner selection 或完整 physical reducer。
 
 Tasks:
 
@@ -767,7 +767,7 @@ Acceptance:
 - Mock snapshot 能驱动伴侣状态变化。（已由 M2 state bridge/view-model tests 覆盖）
 - 拖动不丢 workflow bubble。
 - Renderer 不因 pointermove 每帧重跑 resolver。
-- Live verification：debug CLI 能驱动最小 workflow/status/source/message/paused/connection UI。（已通过；click-through 入口/恢复已小修并通过自动门禁，真实物理点击落到底层 app 需用户干净 GUI 手动确认）
+- Live verification：debug CLI 能驱动最小 workflow/status/source/message/paused/connection UI。（已通过；click-through 入口/恢复已小修并通过自动门禁，真实物理点击落到底层 app 已由用户在干净 GUI 会话中手动确认）
 
 ### M3: Resolver and Asset Loader
 
@@ -963,7 +963,7 @@ Synthesized from this review's findings. Each task derives from a specific findi
   - Surfaced by: Code Quality Q3, Performance P2/P5
   - Files: `frontend/`
   - Verify: component tests + screenshot sanity + integer scale checks
-  - Status: M2 minimal state subscription and workflow/source/status display done and live-verified; full renderer/resolver/asset-driven visuals remain open. Click-through entry/restore received a bounded reliability fix after M2 layout additions; final physical click-through confirmation remains a clean GUI manual check.
+  - Status: M2 minimal state subscription and workflow/source/status display done and live-verified; full renderer/resolver/asset-driven visuals remain open. Click-through entry/restore received a bounded reliability fix after M2 layout additions; final physical click-through confirmation passed in a clean GUI manual check.
 - [ ] **T9 (P1, human: ~1 day / CC: ~45 min)** - Codex wrapper - Emit real workflow events without code content
   - Surfaced by: Architecture Review A4, Test Review, Outside Voice
   - Files: `scripts/`, `cli/` or `src-tauri/`
