@@ -34,6 +34,10 @@ import {
   idlePartnerState,
   partnerStateDisplay
 } from "./partnerStateView";
+import {
+  petdexRowForIntent,
+  resolvePartnerIntent
+} from "./animationIntentView";
 import { buildProbeAtlasDataUrl, spriteFrame } from "./spriteProbe";
 import "./styles.css";
 
@@ -86,7 +90,11 @@ export function App() {
   const dragRef = useRef<DragState | null>(null);
   const stateRevisionRef = useRef(0);
   const probeAtlas = useMemo(() => buildProbeAtlasDataUrl(), []);
-  const frame = spriteFrame("review", frameIndex);
+  const animationIntent = useMemo(
+    () => resolvePartnerIntent(partnerState, dragging ? "carried" : "normal"),
+    [dragging, partnerState]
+  );
+  const frame = spriteFrame(petdexRowForIntent(animationIntent), frameIndex);
   const stateDisplay = partnerStateDisplay(partnerState);
 
   useEffect(() => {

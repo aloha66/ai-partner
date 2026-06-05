@@ -407,20 +407,20 @@ CODE PATHS                                             USER FLOWS
   └── [DONE] M0 integer scale/frame alignment
 
 [+] TypeScript resolver                                [+] Desktop shell
-  ├── [GAP] workflow normal mappings                      ├── [GAP] [->E2E/manual] transparent window
-  ├── [GAP] physical body override                        ├── [GAP] [->E2E/manual] always on top behavior
-  ├── [GAP] waiting/error bubble priority                 ├── [DONE] click-through quiet mode can recover
-  ├── [GAP] done queued under physical                    └── [GAP] multi-display/high-DPI sanity
-  └── [GAP] extension -> legacy -> procedural fallback
+  ├── [DONE/front slice] workflow normal mappings         ├── [GAP] [->E2E/manual] transparent window
+  ├── [DONE/front slice] physical body override           ├── [GAP] [->E2E/manual] always on top behavior
+  ├── [DONE/front slice] waiting/error bubble priority    ├── [DONE] click-through quiet mode can recover
+  ├── [DONE/front slice] done queued under physical       └── [GAP] multi-display/high-DPI sanity
+  └── [DONE/front slice] extension -> legacy -> procedural fallback
 
 [+] Asset loader + validator                           [+] macOS internal build
-  ├── [GAP] pet.json required fields                      ├── [GAP] [->E2E/manual] DMG install launches
-  ├── [GAP] spritesheet exists                            ├── [GAP] debug CLI can reach endpoint
-  ├── [GAP] 1536x1872 atlas                               └── [GAP] diagnostic logs do not leak code
-  ├── [GAP] 192x208 runtime frame
-  ├── [GAP] optional ai-partner.animations.json
-  ├── [GAP] root sandbox/path traversal/symlink reject
-  └── [GAP] extras max 32 frames, fps 1-24
+  ├── [DONE/front slice] pet.json required fields         ├── [GAP] [->E2E/manual] DMG install launches
+  ├── [DONE/front slice] spritesheet exists               ├── [GAP] debug CLI can reach endpoint
+  ├── [DONE/front slice] 1536x1872 atlas                  └── [GAP] diagnostic logs do not leak code
+  ├── [DONE/front slice] 192x208 runtime frame
+  ├── [DONE/front slice] optional ai-partner.animations.json
+  ├── [DONE/front slice] root sandbox/path traversal/symlink reject
+  └── [DONE/front slice] extras max 32 frames, fps 1-24
 
 [+] Codex wrapper
   ├── [GAP] classifier fixtures: running/reading/editing/waiting/error/done
@@ -431,7 +431,7 @@ CODE PATHS                                             USER FLOWS
 
 LLM integration: [NOT MVP] [->EVAL] only when opt-in LLM or memory ships
 
-COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription are tested; resolver, assets, wrapper and packaging remain planned gaps
+COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription + M3 resolver/assets front slice are tested; physical reducer, full asset-driven UI, wrapper and packaging remain planned gaps
 TARGET: 60/60 planned before MVP acceptance
 QUALITY TARGET: contracts/security/resolver/assets/wrapper need behavior + edge + error tests
 ```
@@ -773,6 +773,8 @@ Acceptance:
 
 目标：没有扩展动画也不空白。
 
+Status 2026-06-05：已完成 M3 最小前置切片，但完整 M3 不标完成。`packages/resolver/` 新增纯 TypeScript `resolveAnimation(snapshot, physicalState, capabilities)`，集中 `AnimationRef` / `PartnerCapabilities` / Petdex legacy fallback，覆盖 workflow normal mapping、physical body override、`waiting/error` 高优先级 bubble、`done` 5 秒队列和过期丢弃、extension -> legacy -> procedural fallback。`packages/assets/` 新增 Petdex/hatch-pet thin loader/validator，集中 Petdex atlas/cell/row 常量，校验 `pet.json`、`spritesheet.webp` metadata、可选 `ai-partner.animations.json`、one assets root scan、relative path sandbox、symlink reject、runtime frame/fps/frame-count budgets，并在损坏资产时 fallback 到默认 Petdex capabilities。Frontend 只做必要 wiring：现有 probe atlas 通过 resolver intent 选择 Petdex 行，不做 UI redesign、不做完整 asset selector、不做 Codex wrapper。仍未做 `physicalStateMachine` reducer、完整 asset-driven sprite renderer、partner switch/search、E2E screenshot sanity 和 M4 wrapper。
+
 Tasks:
 
 - `resolveAnimation(snapshot, physicalState, capabilities)`。
@@ -951,6 +953,7 @@ Synthesized from this review's findings. Each task derives from a specific findi
   - Surfaced by: Architecture Review A3, Code Quality Q1/Q3/Q5
   - Files: `packages/resolver/` or `frontend/`
   - Verify: `vitest resolver`
+  - Status: 2026-06-05 M3 front slice done in `packages/resolver/` with matrix tests; remains open for later integration with physical reducer/full renderer.
 - [ ] **T6 (P1, human: ~4h / CC: ~20 min)** - Physical interaction - Implement `physicalStateMachine`
   - Surfaced by: Code Quality Q4, Performance P2
   - Files: `frontend/` or `packages/interaction/`
@@ -959,11 +962,12 @@ Synthesized from this review's findings. Each task derives from a specific findi
   - Surfaced by: Code Quality Q5, Performance P3/P4
   - Files: `packages/assets/` or `frontend/`
   - Verify: asset validator tests for dimensions, path sandbox, symlinks and runtime budgets
+  - Status: 2026-06-05 M3 front slice done in `packages/assets/` for Petdex thin validation/capabilities; full UI asset switching/search remains open.
 - [ ] **T8 (P1, human: ~1 day / CC: ~45 min)** - Frontend - Render partner with CSS/DOM sprite and bubble overlay
   - Surfaced by: Code Quality Q3, Performance P2/P5
   - Files: `frontend/`
   - Verify: component tests + screenshot sanity + integer scale checks
-  - Status: M2 minimal state subscription and workflow/source/status display done and live-verified; full renderer/resolver/asset-driven visuals remain open. Click-through entry/restore received a bounded reliability fix after M2 layout additions; final physical click-through confirmation passed in a clean GUI manual check.
+  - Status: M2 minimal state subscription and workflow/source/status display done and live-verified; 2026-06-05 M3 front slice wires resolver intent into the existing probe atlas without redesign. Full asset-driven visuals, component screenshot sanity, integer scale checks and selector UI remain open. Click-through entry/restore received a bounded reliability fix after M2 layout additions; final physical click-through confirmation passed in a clean GUI manual check.
 - [ ] **T9 (P1, human: ~1 day / CC: ~45 min)** - Codex wrapper - Emit real workflow events without code content
   - Surfaced by: Architecture Review A4, Test Review, Outside Voice
   - Files: `scripts/`, `cli/` or `src-tauri/`

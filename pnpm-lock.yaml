@@ -17,9 +17,15 @@ importers:
 
   frontend:
     dependencies:
+      '@ai-partner/assets':
+        specifier: workspace:*
+        version: link:../packages/assets
       '@ai-partner/contracts':
         specifier: workspace:*
         version: link:../packages/contracts
+      '@ai-partner/resolver':
+        specifier: workspace:*
+        version: link:../packages/resolver
       '@tauri-apps/api':
         specifier: ^2.0.0
         version: 2.11.0
@@ -55,6 +61,25 @@ importers:
         specifier: ^3.0.0
         version: 3.2.6(@types/node@24.12.4)
 
+  packages/assets:
+    dependencies:
+      '@ai-partner/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@ai-partner/resolver':
+        specifier: workspace:*
+        version: link:../resolver
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.12.4
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.6(@types/node@24.12.4)
+
   packages/contracts:
     dependencies:
       ajv:
@@ -83,6 +108,19 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.12.4
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.6(@types/node@24.12.4)
+
+  packages/resolver:
+    dependencies:
+      '@ai-partner/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
       typescript:
         specifier: ^5.0.0
         version: 5.9.3

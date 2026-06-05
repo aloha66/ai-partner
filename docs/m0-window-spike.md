@@ -82,7 +82,7 @@ M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、
 
 ## M1 Rust State Bridge 进展
 
-2026-06-03 已进入 M1 Rust State Bridge。当前已完成并复核内存状态桥、localhost HTTP ingress + runtime descriptor 的最小闭环，以及本地 debug sender/discovery。2026-06-04 已完成 M2 最小前端状态订阅；不实现 Codex wrapper、animation resolver、完整 asset loader。
+2026-06-03 已进入 M1 Rust State Bridge。当前已完成并复核内存状态桥、localhost HTTP ingress + runtime descriptor 的最小闭环，以及本地 debug sender/discovery。2026-06-04 已完成 M2 最小前端状态订阅；2026-06-05 已开始 M3 最小 resolver + asset loader 前置切片。不实现 Codex wrapper、完整 asset-driven renderer 或完整 asset loader UI。
 
 已完成：
 
@@ -106,8 +106,8 @@ M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、
 仍未做：
 
 - Codex wrapper。
-- animation resolver。
-- 完整 asset loader、多 run 聚合 UI。
+- `physicalStateMachine` reducer 和完整 asset-driven renderer。
+- 完整 asset loader UI、partner search/switch、多 run 聚合 UI。
 
 Debug sender 用法：
 

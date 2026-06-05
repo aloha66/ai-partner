@@ -1,32 +1,23 @@
-export const PETDEX_COLUMNS = 8;
-export const PETDEX_ROWS = 9;
-export const PETDEX_CELL_WIDTH = 192;
-export const PETDEX_CELL_HEIGHT = 208;
-export const PETDEX_ATLAS_WIDTH = PETDEX_COLUMNS * PETDEX_CELL_WIDTH;
-export const PETDEX_ATLAS_HEIGHT = PETDEX_ROWS * PETDEX_CELL_HEIGHT;
+export {
+  PETDEX_ATLAS_HEIGHT,
+  PETDEX_ATLAS_WIDTH,
+  PETDEX_CELL_HEIGHT,
+  PETDEX_CELL_WIDTH,
+  PETDEX_COLUMNS,
+  PETDEX_ROWS,
+  petdexRows,
+  type PetdexRow
+} from "@ai-partner/assets/petdex";
 
-export type PetdexRow =
-  | "idle"
-  | "running-right"
-  | "running-left"
-  | "waving"
-  | "jumping"
-  | "failed"
-  | "waiting"
-  | "running"
-  | "review";
-
-export const petdexRows: PetdexRow[] = [
-  "idle",
-  "running-right",
-  "running-left",
-  "waving",
-  "jumping",
-  "failed",
-  "waiting",
-  "running",
-  "review"
-];
+import {
+  PETDEX_ATLAS_HEIGHT,
+  PETDEX_ATLAS_WIDTH,
+  PETDEX_CELL_HEIGHT,
+  PETDEX_CELL_WIDTH,
+  PETDEX_COLUMNS,
+  petdexRows,
+  type PetdexRow
+} from "@ai-partner/assets/petdex";
 
 export interface SpriteFrame {
   row: PetdexRow;

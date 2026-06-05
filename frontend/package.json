@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ai-partner/assets": "workspace:*",
     "@ai-partner/contracts": "workspace:*",
+    "@ai-partner/resolver": "workspace:*",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-global-shortcut": "^2.0.0",
     "lucide-react": "^0.468.0",
