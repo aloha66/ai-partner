@@ -35,7 +35,6 @@ import {
   partnerStateDisplay
 } from "./partnerStateView";
 import {
-  petdexRowForIntent,
   resolvePartnerIntent
 } from "./animationIntentView";
 import {
@@ -43,7 +42,8 @@ import {
   physicalStateMachine,
   type PhysicalMachineEvent
 } from "./physicalStateMachine";
-import { buildProbeAtlasDataUrl, spriteFrame } from "./spriteProbe";
+import { PartnerRenderer } from "./spriteRenderer";
+import { buildProbeAtlasDataUrl } from "./spriteProbe";
 import "./styles.css";
 
 type DragState = {
@@ -112,7 +112,6 @@ export function App() {
     () => resolvePartnerIntent(partnerState, physicalState),
     [partnerState, physicalState]
   );
-  const frame = spriteFrame(petdexRowForIntent(animationIntent), frameIndex);
   const stateDisplay = partnerStateDisplay(partnerState);
 
   useEffect(() => {
@@ -370,30 +369,17 @@ export function App() {
   return (
     <main className="window-spike">
       <section className="companion-zone" aria-label="M0 window spike">
-        <div className="bubble">
-          <span>{stateDisplay.workflowLabel}</span>
-          <strong>{stateDisplay.message}</strong>
-        </div>
-
-        <div
-          className={`partner ${dragging ? "is-dragging" : ""}`}
+        <PartnerRenderer
+          intent={animationIntent}
+          frameIndex={frameIndex}
+          atlasUrl={probeAtlas}
+          dragging={dragging}
           onPointerDown={(event) => void beginManagedDrag(event)}
           onPointerMove={updateManagedDrag}
           onPointerUp={finishManagedDrag}
           onPointerCancel={() => resetManagedDrag("pointer_cancel")}
           onLostPointerCapture={resetLostCaptureIfDragging}
-        >
-          <div
-            className="sprite-frame"
-            style={{
-              width: frame.width,
-              height: frame.height,
-              backgroundImage: `url("${probeAtlas}")`,
-              backgroundSize: frame.backgroundSize,
-              backgroundPosition: frame.backgroundPosition
-            }}
-          />
-        </div>
+        />
       </section>
 
       <aside className="spike-panel">
@@ -506,7 +492,7 @@ export function App() {
 
         <div className="runtime-strip">
           <Move size={14} aria-hidden />
-          <span>{dragging ? "managed drag" : "sprite probe"}</span>
+          <span>{dragging ? "managed drag" : "sprite renderer"}</span>
           <ArrowDownToLine size={14} aria-hidden />
           <span>{stateDisplay.runLabel}</span>
           <span>{stateCommandStatus}</span>

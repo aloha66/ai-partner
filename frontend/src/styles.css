@@ -93,6 +93,44 @@ button {
   scale: 0.895833;
 }
 
+.sprite-frame.effect-shake {
+  animation: sprite-shake 220ms linear infinite;
+}
+
+.sprite-frame.effect-float {
+  animation: sprite-float 1100ms ease-in-out infinite;
+}
+
+.sprite-frame.effect-drop {
+  transform: translate3d(0, 8px, 0) rotate(4deg);
+}
+
+.sprite-frame.effect-squash {
+  transform: translateZ(0) scaleX(1.04) scaleY(0.96);
+}
+
+@keyframes sprite-shake {
+  0%,
+  100% {
+    transform: translate3d(-2px, 0, 0);
+  }
+
+  50% {
+    transform: translate3d(2px, 0, 0);
+  }
+}
+
+@keyframes sprite-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  50% {
+    transform: translate3d(0, -5px, 0);
+  }
+}
+
 .spike-panel {
   align-self: end;
   padding: 6px;

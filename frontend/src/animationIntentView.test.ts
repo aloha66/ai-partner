@@ -3,10 +3,7 @@ import {
   type PartnerStateSnapshot
 } from "@ai-partner/contracts";
 import { describe, expect, it } from "vitest";
-import {
-  petdexRowForIntent,
-  resolvePartnerIntent
-} from "./animationIntentView";
+import { resolvePartnerIntent } from "./animationIntentView";
 
 function snapshot(
   workflowState: PartnerStateSnapshot["workflowState"],
@@ -27,12 +24,12 @@ function snapshot(
 }
 
 describe("animation intent view", () => {
-  it("resolves workflow snapshots to Petdex probe rows without changing the UI shell", () => {
+  it("resolves workflow snapshots with default Petdex capabilities", () => {
     const reading = resolvePartnerIntent(snapshot("reading"), "normal");
     const waitingCarried = resolvePartnerIntent(snapshot("waiting", "等待确认"), "carried");
 
-    expect(petdexRowForIntent(reading)).toBe("review");
-    expect(petdexRowForIntent(waitingCarried)).toBe("idle");
+    expect(reading.body.animation).toBe("legacy.review");
+    expect(waitingCarried.body.animation).toBe("legacy.idle");
     expect(waitingCarried.bubble).toEqual({
       state: "waiting",
       text: "等待确认",
