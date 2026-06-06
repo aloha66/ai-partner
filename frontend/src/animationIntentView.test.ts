@@ -54,6 +54,10 @@ describe("animation intent view", () => {
         "legacy.idle": {
           animation: "legacy.idle",
           loop: true
+        },
+        "legacy.review": {
+          animation: "legacy.review",
+          loop: true
         }
       },
       fallbacks: {},
@@ -74,6 +78,11 @@ describe("animation intent view", () => {
       capabilities,
       queued: doneWhileFalling.queued
     });
+    const newWorkflow = resolvePartnerIntent(snapshot("reading"), "normal", {
+      now: new Date("2026-06-05T00:00:04Z"),
+      capabilities,
+      queued: doneWhileFalling.queued
+    });
 
     expect(doneWhileFalling.body.animation).toBe("physical.falling");
     expect(doneWhileFalling.queued).toEqual([
@@ -86,5 +95,7 @@ describe("animation intent view", () => {
     expect(replayed.body.animation).toBe("workflow.done");
     expect(replayed.body.loop).toBe(false);
     expect(replayed.queued).toEqual([]);
+    expect(newWorkflow.body.animation).toBe("legacy.review");
+    expect(newWorkflow.queued).toEqual([]);
   });
 });

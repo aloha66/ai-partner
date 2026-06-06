@@ -133,6 +133,27 @@ describe("sprite renderer model", () => {
     expect(model.className).toBe("sprite-frame is-looping effect-shake");
   });
 
+  it("renders replayed queued done through the same sprite model", () => {
+    const doneWhileFalling = resolvePartnerIntent(snapshot("done"), "falling", {
+      now: new Date("2026-06-06T00:00:00Z")
+    });
+    const replayed = resolvePartnerIntent(snapshot("idle"), "normal", {
+      now: new Date("2026-06-06T00:00:04Z"),
+      queued: doneWhileFalling.queued
+    });
+    const model = spriteRenderModelForIntent(replayed, 4, "probe-atlas");
+
+    expect(replayed.body.animation).toBe("legacy.waving");
+    expect(model.animation).toBe("legacy.waving");
+    expect(model.row).toBe("waving");
+    expect(model.loop).toBe(false);
+    expect(model.className).toBe("sprite-frame is-once");
+    expect(model.frame).toMatchObject({
+      row: "waving",
+      columnIndex: 4
+    });
+  });
+
   it("normalizes frame indexes before reading the atlas", () => {
     expect(normalizeSpriteColumn(10)).toBe(2);
     expect(normalizeSpriteColumn(-1)).toBe(7);

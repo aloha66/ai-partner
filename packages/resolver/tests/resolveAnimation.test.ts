@@ -108,6 +108,39 @@ describe("resolveAnimation", () => {
     });
   });
 
+  it.each([
+    ["waiting", "carried", "float"],
+    ["waiting", "struggling", "shake"],
+    ["waiting", "falling", "drop"],
+    ["waiting", "recovering", "squash"],
+    ["error", "carried", "float"],
+    ["error", "struggling", "shake"],
+    ["error", "falling", "drop"],
+    ["error", "recovering", "squash"]
+  ] satisfies Array<[
+    PartnerStateSnapshot["workflowState"],
+    PhysicalState,
+    string
+  ]>)(
+    "keeps %s bubble semantics while %s overrides body motion",
+    (workflowState, physicalState, procedural) => {
+      const message = `${workflowState} still visible`;
+      const intent = resolveAnimation(
+        snapshot(workflowState, { message }),
+        physicalState,
+        defaultPetdexCapabilities
+      );
+
+      expect(intent.body.animation).toMatch(/^legacy\./);
+      expect(intent.body.procedural).toContain(procedural);
+      expect(intent.bubble).toEqual({
+        state: workflowState,
+        text: message,
+        priority: "high"
+      });
+    }
+  );
+
   it("falls error back to legacy failed and keeps high priority bubble", () => {
     const intent = resolveAnimation(snapshot("error"), "normal", defaultPetdexCapabilities);
 

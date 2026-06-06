@@ -106,11 +106,17 @@ pnpm tauri:dev
 - 验证通过：`pnpm --filter @ai-partner/resolver test`、`pnpm --filter @ai-partner/resolver typecheck`、`pnpm --filter @ai-partner/assets test`、`pnpm --filter @ai-partner/assets typecheck`、`pnpm --filter @ai-partner/frontend test`、`pnpm --filter @ai-partner/frontend typecheck`。
 - 本轮仍不做 UI redesign、partner search/switch、完整 asset loader UI、多 AI adapter，也未碰 `src-tauri`。
 
+2026-06-06 T6 physical/renderer integration 最小收口：
+
+- T6 最小 physical/renderer integration 已收口，不扩大 UI：`physicalStateMachine` 仍是纯 reducer，`App.tsx` 只把 drag start/hold/release/cancel 转成 semantic physical state；pointermove 坐标保留在 ref + rAF + Tauri window move 边界，不进入 resolver dependency。
+- Resolver/renderer 语义补测完成：`waiting/error` bubble 在 `carried/struggling/falling/recovering` 下仍保留 workflow state/text/high priority，只替换 body motion；queued `done` 在 recovery 后进入同一 CSS/DOM sprite model 补播，且新 workflow 会丢弃旧 queued done。
+- 本轮文档把 T6/T8 表述限定为最小 CSS/DOM sprite renderer 集成；右键菜单、selector、partner search/switch 和完整产品 UI 仍属后续范围。
+
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
 
 ## M1 Rust State Bridge 进展
 
-2026-06-03 已进入 M1 Rust State Bridge。当前已完成并复核内存状态桥、localhost HTTP ingress + runtime descriptor 的最小闭环，以及本地 debug sender/discovery。2026-06-04 已完成 M2 最小前端状态订阅；2026-06-05 已开始 M3 最小 resolver + asset loader 前置切片；2026-06-06 已完成 T6 最小 physical reducer 切片、T8 最小 renderer 收口和 T9 最小 Codex wrapper 本地 live verification。不实现完整 asset loader UI、partner search/switch 或多 AI adapter。
+2026-06-03 已进入 M1 Rust State Bridge。当前已完成并复核内存状态桥、localhost HTTP ingress + runtime descriptor 的最小闭环，以及本地 debug sender/discovery。2026-06-04 已完成 M2 最小前端状态订阅；2026-06-05 已开始 M3 最小 resolver + asset loader 前置切片；2026-06-06 已完成 T6 最小 physical/renderer integration 收口、T8 最小 renderer 收口和 T9 最小 Codex wrapper 本地 live verification。不实现完整 asset loader UI、partner search/switch 或多 AI adapter。
 
 已完成：
 
@@ -130,9 +136,9 @@ M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、
 - Codex wrapper tests 覆盖 classifier、structured priority、stdout/stderr fallback、unknown fallback、exit mapping、allowed source 和 prompt/code/file content 不进入 ingress payload。
 - `frontend/src/tauriWindow.ts`：新增 M2 state bridge，renderer 可调用 `get_current_state`，订阅 `partner-state-changed`，并通过 `pause`、`resume`、`clear_error` 控制 Rust state store；控制命令失败时回拉 `get_current_state` 作为兜底。
 - `frontend/src/App.tsx`：启动时注册 Tauri event listener 并拉取当前 snapshot；现有窗口 UI 中显示 workflow state、source、message、paused、connection，并保留 M0 window controls。Pause/resume/clear error 已接到前端按钮，command 返回 snapshot 后立即更新 UI。
-- `frontend/src/physicalStateMachine.ts`：新增 T6 最小 pure reducer，覆盖 `normal/carried/struggling/falling/recovering` 和 abnormal reset；`App.tsx` 只把现有 drag start/hold/release/cancel 转成 semantic physical state，不改 UI 外观。
+- `frontend/src/physicalStateMachine.ts`：新增 T6 最小 pure reducer，覆盖 `normal/carried/struggling/falling/recovering` 和 abnormal reset；`App.tsx` 只把现有 drag start/hold/release/cancel 转成 semantic physical state，不改 UI 外观，pointermove 坐标留在 ref + rAF 边界，不进入 resolver dependency。
 - T8 最小 renderer 收口：现有 frontend 以 CSS/DOM sprite 显示默认 Petdex/probe atlas，并由 resolver intent 映射到默认 Petdex/probe atlas 行；bubble/status/source overlay、workflow 状态和 520x360 默认窗口布局已完成 screenshot sanity，证据为 `/private/tmp/ai-partner-t8-renderer-520x360.png`。
-- M3/T5/T7 最小闭环收口：frontend resolver adapter 支持 capabilities/queued 注入，App 保留 `done` body queue，resolver 在新 workflow 下丢弃旧 queued done；asset fallback 到默认 Petdex capabilities 后已通过 resolver 非空 intent 测试，loaded canonical intent 到 Petdex/probe row 的 renderer 模型测试已覆盖。
+- M3/T5/T7 最小闭环收口：frontend resolver adapter 支持 capabilities/queued 注入，App 保留 `done` body queue，resolver 在新 workflow 下丢弃旧 queued done；asset fallback 到默认 Petdex capabilities 后已通过 resolver 非空 intent 测试，loaded canonical intent 到 Petdex/probe row、physical override bubble 语义和 queued done replay 到 CSS/DOM sprite model 的测试已覆盖。
 - `src-tauri/capabilities/m0-window-spike.json`：新增 `core:event:allow-listen`，允许 renderer 订阅 `partner-state-changed`。
 - Frontend tests 覆盖 snapshot display view model、Tauri event update callback 和 state command fallback。
 
