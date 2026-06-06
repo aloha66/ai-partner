@@ -6,6 +6,11 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { resolveAnimation } from "@ai-partner/resolver";
+import {
+  PARTNER_STATE_SNAPSHOT_SCHEMA_VERSION,
+  type PartnerStateSnapshot
+} from "@ai-partner/contracts";
 import { describe, expect, it } from "vitest";
 import {
   PETDEX_ATLAS_HEIGHT,
@@ -53,6 +58,20 @@ async function makePartnerRoot(): Promise<string> {
 
 async function writeManifest(root: string, manifest: unknown) {
   await writeFile(join(root, "ai-partner.animations.json"), JSON.stringify(manifest));
+}
+
+function snapshot(workflowState: PartnerStateSnapshot["workflowState"]): PartnerStateSnapshot {
+  return {
+    schemaVersion: PARTNER_STATE_SNAPSHOT_SCHEMA_VERSION,
+    workflowState,
+    runId: "run_asset_test",
+    activeRunId: "run_asset_test",
+    source: "cli",
+    priority: "normal",
+    updatedAt: "2026-06-06T00:00:00Z",
+    paused: false,
+    connection: "ok"
+  };
 }
 
 describe("validatePartnerAsset", () => {
@@ -366,6 +385,21 @@ describe("validatePartnerAsset", () => {
       })
     ).rejects.toMatchObject({
       name: "AssetValidationError"
+    });
+  });
+
+  it("feeds invalid-asset fallback capabilities through resolver without blanking the default partner", async () => {
+    const root = await makePartnerRoot();
+    const capabilities = await loadPartnerCapabilities(root, {
+      readImageMetadata: async () => ({ width: 1, height: 1 })
+    });
+    const intent = resolveAnimation(snapshot("reading"), "normal", capabilities);
+
+    expect(capabilities.partnerId).toBe("default-petdex");
+    expect(intent.body.animation).toBe("legacy.review");
+    expect(intent.bubble).toMatchObject({
+      state: "reading",
+      text: "正在读取项目内容"
     });
   });
 

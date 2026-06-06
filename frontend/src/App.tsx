@@ -11,6 +11,7 @@ import {
   ScanLine,
   ShieldCheck
 } from "lucide-react";
+import { type AnimationIntent } from "@ai-partner/contracts";
 import {
   applyM0WindowDefaults,
   clearPartnerError,
@@ -88,12 +89,27 @@ function runtimeRunStatus(runLabel: string): string {
   return runLabel === "no active run" ? "r0" : "r1";
 }
 
+function queuedAnimationsEqual(
+  left: AnimationIntent["queued"],
+  right: AnimationIntent["queued"]
+): boolean {
+  return left.length === right.length && left.every((item, index) => {
+    const other = right[index];
+    return (
+      item.animation === other.animation &&
+      item.reason === other.reason &&
+      item.expiresAt === other.expiresAt
+    );
+  });
+}
+
 export function App() {
   const [status, setStatus] = useState<SpikeStatus | null>(null);
   const [clickThrough, setClickThrough] = useState(false);
   const [recoveryStatus, setRecoveryStatus] = useState("auto");
   const [partnerState, setPartnerState] = useState(idlePartnerState);
   const [stateCommandStatus, setStateCommandStatus] = useState("ok");
+  const [queuedAnimations, setQueuedAnimations] = useState<AnimationIntent["queued"]>([]);
   const recoveryTimerRef = useRef<number | null>(null);
   const [frameIndex, setFrameIndex] = useState(0);
   const [physicalMachine, dispatchPhysical] = useReducer(
@@ -112,10 +128,18 @@ export function App() {
   const physicalState = physicalMachine.state;
   const dragging = physicalState === "carried" || physicalState === "struggling";
   const animationIntent = useMemo(
-    () => resolvePartnerIntent(partnerState, physicalState),
-    [partnerState, physicalState]
+    () => resolvePartnerIntent(partnerState, physicalState, {
+      queued: queuedAnimations
+    }),
+    [partnerState, physicalState, queuedAnimations]
   );
   const stateDisplay = partnerStateDisplay(partnerState);
+
+  useEffect(() => {
+    setQueuedAnimations((current) =>
+      queuedAnimationsEqual(current, animationIntent.queued) ? current : animationIntent.queued
+    );
+  }, [animationIntent.queued]);
 
   useEffect(() => {
     let shortcutCleanup: (() => void) | undefined;

@@ -66,6 +66,40 @@ describe("sprite renderer model", () => {
     expect(model.className).toBe("sprite-frame is-looping");
   });
 
+  it("maps loaded canonical resolver intents to Petdex probe rows", () => {
+    const intent = resolvePartnerIntent(snapshot("reading"), "normal", {
+      capabilities: {
+        partnerId: "loaded-partner",
+        animations: {
+          "workflow.reading": {
+            animation: "workflow.reading",
+            loop: true
+          },
+          "legacy.idle": {
+            animation: "legacy.idle",
+            loop: true
+          }
+        },
+        fallbacks: {},
+        runtimeLimits: {
+          frameWidth: 192,
+          frameHeight: 208,
+          maxFramesPerAnimation: 32,
+          minFps: 1,
+          maxFps: 24
+        }
+      }
+    });
+    const model = spriteRenderModelForIntent(intent, 2, "probe-atlas");
+
+    expect(model.animation).toBe("workflow.reading");
+    expect(model.row).toBe("review");
+    expect(model.frame).toMatchObject({
+      row: "review",
+      columnIndex: 2
+    });
+  });
+
   it("keeps every default workflow state on a visible Petdex probe row", () => {
     expect(Object.fromEntries(
       (["idle", "running", "reading", "editing", "waiting", "error", "done"] as const).map(

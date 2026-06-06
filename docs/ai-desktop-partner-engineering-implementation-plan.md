@@ -389,9 +389,9 @@ CODE PATHS                                             USER FLOWS
   └── [DONE/T9] wrapper descriptor discovery              └── [DONE] pause prevents event spam on resume
 
 [+] Rust ingress + state store                         [+] Drag and physical interaction
-  ├── [DONE] auth/localhost/CORS/origin                   ├── [GAP] carried -> struggling -> falling -> recovering
-  ├── [DONE] payload 4KB + forbidden fields               ├── [GAP] [->E2E] waiting bubble survives drag
-  ├── [DONE] duplicate event id + TTL/LRU                 └── [GAP] done body celebration expires after 5s
+  ├── [DONE] auth/localhost/CORS/origin                   ├── [DONE/front slice] carried -> struggling -> falling -> recovering
+  ├── [DONE] payload 4KB + forbidden fields               ├── [DONE/model] waiting bubble survives drag
+  ├── [DONE] duplicate event id + TTL/LRU                 └── [DONE/model] done body celebration expires after 5s
   ├── [DONE] 10 events/s burst 30 rate budget
   ├── [DONE] message newline/length rejection
   ├── [DONE] activeRunId arbitration
@@ -400,7 +400,7 @@ CODE PATHS                                             USER FLOWS
   └── [DONE] get_current_state/pause/resume/clear_error
 
 [+] Tauri bridge + renderer                            [+] Partner selection
-  ├── [DONE] state event emitted by Rust                  ├── [GAP] corrupt asset shows default partner
+  ├── [DONE] state event emitted by Rust                  ├── [DONE/model] corrupt asset falls back to default partner
   ├── [DONE] renderer subscription pulls current snapshot ├── [GAP] search/switch local partner
   ├── [DONE] minimal bubble/source/status visual          └── [GAP] exit requires confirmation
   ├── [DONE/front slice] physicalStateMachine reducer
@@ -413,6 +413,7 @@ CODE PATHS                                             USER FLOWS
   ├── [DONE/front slice] physical body override           ├── [GAP] [->E2E/manual] always on top behavior
   ├── [DONE/front slice] waiting/error bubble priority    ├── [DONE] click-through quiet mode can recover
   ├── [DONE/front slice] done queued under physical       └── [GAP] multi-display/high-DPI sanity
+  ├── [DONE/front slice] frontend queued done replay
   └── [DONE/front slice] extension -> legacy -> procedural fallback
 
 [+] Asset loader + validator                           [+] macOS internal build
@@ -433,7 +434,7 @@ CODE PATHS                                             USER FLOWS
 
 LLM integration: [NOT MVP] [->EVAL] only when opt-in LLM or memory ships
 
-COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription + M3 resolver/assets front slice + T6 physical reducer front slice + T8 minimal CSS/DOM sprite renderer + T9 minimal Codex wrapper event bridge are tested; full asset loader UI, partner search/switch and packaging remain planned gaps. External Codex provider live run requires explicit user approval before execution.
+COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription + M3 resolver/assets front slice + T5/T7 renderer integration closeout + T6 physical reducer front slice + T8 minimal CSS/DOM sprite renderer + T9 minimal Codex wrapper event bridge are tested; full asset loader UI, partner search/switch and packaging remain planned gaps. External Codex provider live run requires explicit user approval before execution.
 TARGET: 60/60 planned before MVP acceptance
 QUALITY TARGET: contracts/security/resolver/assets/wrapper need behavior + edge + error tests
 ```
@@ -775,7 +776,7 @@ Acceptance:
 
 目标：没有扩展动画也不空白。
 
-Status 2026-06-06：已完成 M3 最小前置切片，但完整 M3 不标完成。`packages/resolver/` 新增纯 TypeScript `resolveAnimation(snapshot, physicalState, capabilities)`，集中 `AnimationRef` / `PartnerCapabilities` / Petdex legacy fallback，覆盖 workflow normal mapping、physical body override、`waiting/error` 高优先级 bubble、`done` 5 秒队列和过期丢弃、extension -> legacy -> procedural fallback。`packages/assets/` 新增 Petdex/hatch-pet thin loader/validator，集中 Petdex atlas/cell/row 常量，校验 `pet.json`、`spritesheet.webp` metadata、可选 `ai-partner.animations.json`、one assets root scan、relative path sandbox、symlink reject、runtime frame/fps/frame-count budgets，并在损坏资产时 fallback 到默认 Petdex capabilities。Frontend 只做必要 wiring：现有 probe atlas 通过 resolver intent 选择 Petdex 行，不做 UI redesign、不做完整 asset selector。2026-06-06 已接入 T6 最小 physical reducer slice；2026-06-06 已完成 T8 最小 renderer 收口，默认 Petdex/probe atlas intent 映射、CSS/DOM sprite、bubble/status overlay 和 520x360 screenshot/layout sanity 已落地；2026-06-06 已完成 T9 最小 wrapper event bridge；仍未做 partner switch/search。
+Status 2026-06-06：已完成 M3/T5/T7 最小闭环，但完整 M3 产品面不标完成。`packages/resolver/` 新增纯 TypeScript `resolveAnimation(snapshot, physicalState, capabilities)`，集中 `AnimationRef` / `PartnerCapabilities` / Petdex legacy fallback，覆盖 workflow normal mapping、physical body override、`waiting/error` 高优先级 bubble、`done` 5 秒队列和过期丢弃、extension -> legacy -> procedural fallback；前端 resolver adapter 现在可注入 loaded capabilities 和 queued state，`App.tsx` 会保留并回传 queued `done`，resolver 在新 workflow 激活时丢弃旧 queued done，避免旧完成庆祝压过新任务。`packages/assets/` 新增 Petdex/hatch-pet thin loader/validator，集中 Petdex atlas/cell/row 常量，校验 `pet.json`、`spritesheet.webp` metadata、可选 `ai-partner.animations.json`、one assets root scan、relative path sandbox、symlink reject、runtime frame/fps/frame-count budgets，并在损坏资产时 fallback 到默认 Petdex capabilities；测试已覆盖 invalid asset -> default Petdex capabilities -> resolver 非空 intent。Frontend 只做必要 wiring：现有 probe atlas 通过 resolver intent 选择 Petdex 行，测试已覆盖 loaded canonical intent 到 Petdex/probe row；不做 UI redesign、不做完整 asset selector。2026-06-06 已接入 T6 最小 physical reducer slice；2026-06-06 已完成 T8 最小 renderer 收口，默认 Petdex/probe atlas intent 映射、CSS/DOM sprite、bubble/status overlay 和 520x360 screenshot/layout sanity 已落地；2026-06-06 已完成 T9 最小 wrapper event bridge；仍未做 partner switch/search。
 
 Tasks:
 
@@ -791,8 +792,8 @@ Tasks:
 
 Acceptance:
 
-- Resolver 矩阵全测。
-- 损坏或越界资产 fallback 到默认伴侣。
+- Resolver 矩阵全测，并覆盖 frontend queued done replay 与新 workflow 丢弃旧 queue。
+- 损坏或越界资产 fallback 到默认伴侣，并通过 resolver 非空 intent 测试。
 
 ### M4: Codex Wrapper MVP
 
@@ -953,21 +954,21 @@ Synthesized from this review's findings. Each task derives from a specific findi
   - Files: `src-tauri/`
   - Verify: `cargo test` for auth, rate limit, active run, pause/resume, timers
   - Status: M1 secure localhost ingress + state store done; renderer subscription remains M2.
-- [ ] **T5 (P1, human: ~1 day / CC: ~45 min)** - Resolver - Implement pure TypeScript animation resolver
+- [x] **T5 (P1, human: ~1 day / CC: ~45 min)** - Resolver - Implement pure TypeScript animation resolver
   - Surfaced by: Architecture Review A3, Code Quality Q1/Q3/Q5
   - Files: `packages/resolver/` or `frontend/`
   - Verify: `vitest resolver`
-  - Status: 2026-06-05 M3 front slice done in `packages/resolver/` with matrix tests; remains open for later integration with physical reducer/full renderer.
+  - Status: 2026-06-06 M3/T5 closeout done. `packages/resolver/` has matrix tests, physical override, high-priority waiting/error bubbles, `done` queue + 5s expiry, stale queue drop on new workflow, and frontend queued replay wiring. Integration with the minimal CSS sprite renderer is covered by loaded canonical intent -> Petdex/probe row tests; full UI selector/right-click work remains outside T5.
 - [ ] **T6 (P1, human: ~4h / CC: ~20 min)** - Physical interaction - Implement `physicalStateMachine`
   - Surfaced by: Code Quality Q4, Performance P2
   - Files: `frontend/` or `packages/interaction/`
   - Verify: reducer tests and drag does not rerun resolver per frame
   - Status: 2026-06-06 T6 front slice done in `frontend/src/physicalStateMachine.ts` with reducer tests and minimal App wiring; full renderer/right-click/selector work remains open under later UI tasks.
-- [ ] **T7 (P1, human: ~1 day / CC: ~45 min)** - Assets - Implement Petdex thin import, validator and fallback
+- [x] **T7 (P1, human: ~1 day / CC: ~45 min)** - Assets - Implement Petdex thin import, validator and fallback
   - Surfaced by: Code Quality Q5, Performance P3/P4
   - Files: `packages/assets/` or `frontend/`
   - Verify: asset validator tests for dimensions, path sandbox, symlinks and runtime budgets
-  - Status: 2026-06-05 M3 front slice done in `packages/assets/` for Petdex thin validation/capabilities; full UI asset switching/search remains open.
+  - Status: 2026-06-06 M3/T7 closeout done. `packages/assets/` covers Petdex thin validation/capabilities, path sandbox/symlink/runtime budgets, one-root scan, invalid asset fallback to default Petdex capabilities, and resolver nonblank intent after fallback. Full UI asset switching/search remains open under later product scope.
 - [x] **T8 (P1, human: ~1 day / CC: ~45 min)** - Frontend - Render partner with CSS/DOM sprite and bubble overlay
   - Surfaced by: Code Quality Q3, Performance P2/P5
   - Files: `frontend/`

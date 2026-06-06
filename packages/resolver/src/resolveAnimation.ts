@@ -62,7 +62,9 @@ export function resolveAnimation(
   const now = options.now ?? new Date();
   const mergedCapabilities = mergeWithDefaultFallbacks(capabilities);
   const activeQueue = activeQueuedAnimations(options.queued ?? [], now);
-  const replayQueued = physicalState === "normal" ? activeQueue[0] : undefined;
+  const canUseQueuedDone =
+    snapshot.workflowState === "idle" || snapshot.workflowState === "done";
+  const replayQueued = physicalState === "normal" && canUseQueuedDone ? activeQueue[0] : undefined;
   const workflowTarget = workflowAnimationRef(snapshot.workflowState);
   const physicalTarget = physicalTargetByState[physicalState];
 
@@ -83,7 +85,7 @@ export function resolveAnimation(
   const queued =
     snapshot.workflowState === "done" && physicalState !== "normal"
       ? preserveOrQueueDoneAnimation(activeQueue, workflowTarget, mergedCapabilities, now)
-      : activeQueue;
+      : canUseQueuedDone ? activeQueue : [];
 
   return buildIntent(body, bubbleForSnapshot(snapshot), queued);
 }

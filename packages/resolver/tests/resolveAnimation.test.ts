@@ -205,6 +205,22 @@ describe("resolveAnimation", () => {
     expect(intent.queued).toEqual([]);
   });
 
+  it("drops queued done animations when a new workflow state is active", () => {
+    const intent = resolveAnimation(snapshot("reading"), "normal", defaultPetdexCapabilities, {
+      now: new Date("2026-06-02T00:00:04Z"),
+      queued: [
+        {
+          animation: "legacy.waving",
+          reason: "physical-override",
+          expiresAt: "2026-06-02T00:00:05Z"
+        }
+      ]
+    });
+
+    expect(intent.body.animation).toBe("legacy.review");
+    expect(intent.queued).toEqual([]);
+  });
+
   it("does not refresh queued done expiry while physical override continues", () => {
     const intent = resolveAnimation(snapshot("done"), "falling", defaultPetdexCapabilities, {
       now: new Date("2026-06-02T00:00:03Z"),

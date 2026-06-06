@@ -98,6 +98,14 @@ pnpm tauri:dev
 - 本轮未跑 `cargo test`，因为 T8 收口未修改 Rust，也未碰 `src-tauri`。
 - 本轮明确不做 UI redesign、不做 partner search/switch、不做多 AI adapter、不碰 `src-tauri`。
 
+2026-06-06 M3/T5/T7 next closeout：
+
+- T5 最小闭环补齐：前端 resolver adapter 可注入 loaded `PartnerCapabilities` 和 resolver queue，`App.tsx` 保留并回传 `done` body queue；resolver 在新 workflow 激活时丢弃旧 queued done，避免旧完成庆祝压过新任务。
+- T7 最小闭环补齐：无效资产 fallback 到默认 Petdex capabilities 后，会继续进入 resolver 并产出非空默认动画 intent；测试覆盖 `invalid asset -> default-petdex -> legacy.review`。
+- T5/T7 与 T8 集成验证补齐：测试覆盖 loaded canonical resolver intent 映射到 Petdex/probe `review` row，以及 queued `workflow.done` 在 physical recovery 后 5 秒内补播。
+- 验证通过：`pnpm --filter @ai-partner/resolver test`、`pnpm --filter @ai-partner/resolver typecheck`、`pnpm --filter @ai-partner/assets test`、`pnpm --filter @ai-partner/assets typecheck`、`pnpm --filter @ai-partner/frontend test`、`pnpm --filter @ai-partner/frontend typecheck`。
+- 本轮仍不做 UI redesign、partner search/switch、完整 asset loader UI、多 AI adapter，也未碰 `src-tauri`。
+
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
 
 ## M1 Rust State Bridge 进展
@@ -124,6 +132,7 @@ M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、
 - `frontend/src/App.tsx`：启动时注册 Tauri event listener 并拉取当前 snapshot；现有窗口 UI 中显示 workflow state、source、message、paused、connection，并保留 M0 window controls。Pause/resume/clear error 已接到前端按钮，command 返回 snapshot 后立即更新 UI。
 - `frontend/src/physicalStateMachine.ts`：新增 T6 最小 pure reducer，覆盖 `normal/carried/struggling/falling/recovering` 和 abnormal reset；`App.tsx` 只把现有 drag start/hold/release/cancel 转成 semantic physical state，不改 UI 外观。
 - T8 最小 renderer 收口：现有 frontend 以 CSS/DOM sprite 显示默认 Petdex/probe atlas，并由 resolver intent 映射到默认 Petdex/probe atlas 行；bubble/status/source overlay、workflow 状态和 520x360 默认窗口布局已完成 screenshot sanity，证据为 `/private/tmp/ai-partner-t8-renderer-520x360.png`。
+- M3/T5/T7 最小闭环收口：frontend resolver adapter 支持 capabilities/queued 注入，App 保留 `done` body queue，resolver 在新 workflow 下丢弃旧 queued done；asset fallback 到默认 Petdex capabilities 后已通过 resolver 非空 intent 测试，loaded canonical intent 到 Petdex/probe row 的 renderer 模型测试已覆盖。
 - `src-tauri/capabilities/m0-window-spike.json`：新增 `core:event:allow-listen`，允许 renderer 订阅 `partner-state-changed`。
 - Frontend tests 覆盖 snapshot display view model、Tauri event update callback 和 state command fallback。
 
