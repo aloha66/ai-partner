@@ -82,7 +82,7 @@ M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、
 
 ## M1 Rust State Bridge 进展
 
-2026-06-03 已进入 M1 Rust State Bridge。当前已完成并复核内存状态桥、localhost HTTP ingress + runtime descriptor 的最小闭环，以及本地 debug sender/discovery。2026-06-04 已完成 M2 最小前端状态订阅；2026-06-05 已开始 M3 最小 resolver + asset loader 前置切片。不实现 Codex wrapper、完整 asset-driven renderer 或完整 asset loader UI。
+2026-06-03 已进入 M1 Rust State Bridge。当前已完成并复核内存状态桥、localhost HTTP ingress + runtime descriptor 的最小闭环，以及本地 debug sender/discovery。2026-06-04 已完成 M2 最小前端状态订阅；2026-06-05 已开始 M3 最小 resolver + asset loader 前置切片；2026-06-06 已完成 T6 最小 physical reducer 切片。不实现 Codex wrapper、完整 asset-driven renderer 或完整 asset loader UI。
 
 已完成：
 
@@ -100,13 +100,14 @@ M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、
 - Debug sender tests 覆盖 descriptor missing/stale、endpoint failure、bad token/connection failure、合法事件发送和 forbidden payload 拒绝。
 - `frontend/src/tauriWindow.ts`：新增 M2 state bridge，renderer 可调用 `get_current_state`，订阅 `partner-state-changed`，并通过 `pause`、`resume`、`clear_error` 控制 Rust state store；控制命令失败时回拉 `get_current_state` 作为兜底。
 - `frontend/src/App.tsx`：启动时注册 Tauri event listener 并拉取当前 snapshot；现有窗口 UI 中显示 workflow state、source、message、paused、connection，并保留 M0 window controls。Pause/resume/clear error 已接到前端按钮，command 返回 snapshot 后立即更新 UI。
+- `frontend/src/physicalStateMachine.ts`：新增 T6 最小 pure reducer，覆盖 `normal/carried/struggling/falling/recovering` 和 abnormal reset；`App.tsx` 只把现有 drag start/hold/release/cancel 转成 semantic physical state，不改 UI 外观。
 - `src-tauri/capabilities/m0-window-spike.json`：新增 `core:event:allow-listen`，允许 renderer 订阅 `partner-state-changed`。
 - Frontend tests 覆盖 snapshot display view model、Tauri event update callback 和 state command fallback。
 
 仍未做：
 
 - Codex wrapper。
-- `physicalStateMachine` reducer 和完整 asset-driven renderer。
+- 完整 asset-driven renderer。
 - 完整 asset loader UI、partner search/switch、多 run 聚合 UI。
 
 Debug sender 用法：

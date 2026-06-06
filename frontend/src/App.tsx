@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   ArrowDownToLine,
   CirclePause,
@@ -38,6 +38,11 @@ import {
   petdexRowForIntent,
   resolvePartnerIntent
 } from "./animationIntentView";
+import {
+  initialPhysicalMachineState,
+  physicalStateMachine,
+  type PhysicalMachineEvent
+} from "./physicalStateMachine";
 import { buildProbeAtlasDataUrl, spriteFrame } from "./spriteProbe";
 import "./styles.css";
 
@@ -50,6 +55,8 @@ type DragState = {
   latestY: number;
   raf: number | null;
 };
+
+type PhysicalTimerName = "struggle" | "land" | "recover";
 
 const checks = [
   ["transparent", "透明"],
@@ -86,13 +93,24 @@ export function App() {
   const [stateCommandStatus, setStateCommandStatus] = useState("state controls ready");
   const recoveryTimerRef = useRef<number | null>(null);
   const [frameIndex, setFrameIndex] = useState(0);
-  const [dragging, setDragging] = useState(false);
+  const [physicalMachine, dispatchPhysical] = useReducer(
+    physicalStateMachine,
+    initialPhysicalMachineState
+  );
   const dragRef = useRef<DragState | null>(null);
+  const dragAttemptRef = useRef(0);
+  const physicalTimersRef = useRef<Record<PhysicalTimerName, number | null>>({
+    struggle: null,
+    land: null,
+    recover: null
+  });
   const stateRevisionRef = useRef(0);
   const probeAtlas = useMemo(() => buildProbeAtlasDataUrl(), []);
+  const physicalState = physicalMachine.state;
+  const dragging = physicalState === "carried" || physicalState === "struggling";
   const animationIntent = useMemo(
-    () => resolvePartnerIntent(partnerState, dragging ? "carried" : "normal"),
-    [dragging, partnerState]
+    () => resolvePartnerIntent(partnerState, physicalState),
+    [partnerState, physicalState]
   );
   const frame = spriteFrame(petdexRowForIntent(animationIntent), frameIndex);
   const stateDisplay = partnerStateDisplay(partnerState);
@@ -135,6 +153,8 @@ export function App() {
       restoreCleanup?.();
     };
   }, []);
+
+  useEffect(() => clearPhysicalTimers, []);
 
   useEffect(() => {
     let disposed = false;
@@ -186,22 +206,34 @@ export function App() {
   }, []);
 
   async function beginManagedDrag(event: React.PointerEvent<HTMLDivElement>) {
+    const attempt = dragAttemptRef.current + 1;
+    dragAttemptRef.current = attempt;
     event.currentTarget.setPointerCapture(event.pointerId);
-    const [position, cursor] = await Promise.all([
-      currentWindowPosition(),
-      currentCursorPosition()
-    ]);
+    try {
+      const [position, cursor] = await Promise.all([
+        currentWindowPosition(),
+        currentCursorPosition()
+      ]);
+      if (dragAttemptRef.current !== attempt) {
+        return;
+      }
 
-    dragRef.current = {
-      windowStartX: position.x,
-      windowStartY: position.y,
-      cursorStartX: cursor.x,
-      cursorStartY: cursor.y,
-      latestX: position.x,
-      latestY: position.y,
-      raf: null
-    };
-    setDragging(true);
+      dragRef.current = {
+        windowStartX: position.x,
+        windowStartY: position.y,
+        cursorStartX: cursor.x,
+        cursorStartY: cursor.y,
+        latestX: position.x,
+        latestY: position.y,
+        raf: null
+      };
+      clearPhysicalTimers();
+      dispatchPhysical({ type: "drag_start" });
+      schedulePhysicalEvent("struggle", { type: "struggle" }, 450);
+    } catch {
+      dragAttemptRef.current += 1;
+      resetManagedDrag("abnormal");
+    }
   }
 
   function updateManagedDrag(event: React.PointerEvent<HTMLDivElement>) {
@@ -229,13 +261,64 @@ export function App() {
     }
   }
 
-  function endManagedDrag() {
+  function finishManagedDrag() {
     const drag = dragRef.current;
     if (drag && drag.raf !== null) {
       window.cancelAnimationFrame(drag.raf);
     }
+    dragAttemptRef.current += 1;
     dragRef.current = null;
-    setDragging(false);
+    clearPhysicalTimer("struggle");
+    if (!drag) {
+      dispatchPhysical({ type: "reset", reason: "lost_capture" });
+      return;
+    }
+    dispatchPhysical({ type: "drag_end" });
+    schedulePhysicalEvent("land", { type: "land" }, 120);
+    schedulePhysicalEvent("recover", { type: "recover" }, 340);
+  }
+
+  function resetManagedDrag(reason: "pointer_cancel" | "lost_capture" | "abnormal") {
+    const drag = dragRef.current;
+    if (drag && drag.raf !== null) {
+      window.cancelAnimationFrame(drag.raf);
+    }
+    dragAttemptRef.current += 1;
+    dragRef.current = null;
+    clearPhysicalTimers();
+    dispatchPhysical({ type: "reset", reason });
+  }
+
+  function resetLostCaptureIfDragging() {
+    if (dragRef.current) {
+      resetManagedDrag("lost_capture");
+    }
+  }
+
+  function schedulePhysicalEvent(
+    name: PhysicalTimerName,
+    event: PhysicalMachineEvent,
+    delayMs: number
+  ) {
+    clearPhysicalTimer(name);
+    physicalTimersRef.current[name] = window.setTimeout(() => {
+      physicalTimersRef.current[name] = null;
+      dispatchPhysical(event);
+    }, delayMs);
+  }
+
+  function clearPhysicalTimer(name: PhysicalTimerName) {
+    const timer = physicalTimersRef.current[name];
+    if (timer !== null) {
+      window.clearTimeout(timer);
+      physicalTimersRef.current[name] = null;
+    }
+  }
+
+  function clearPhysicalTimers() {
+    clearPhysicalTimer("struggle");
+    clearPhysicalTimer("land");
+    clearPhysicalTimer("recover");
   }
 
   async function toggleClickThrough() {
@@ -296,8 +379,9 @@ export function App() {
           className={`partner ${dragging ? "is-dragging" : ""}`}
           onPointerDown={(event) => void beginManagedDrag(event)}
           onPointerMove={updateManagedDrag}
-          onPointerUp={endManagedDrag}
-          onPointerCancel={endManagedDrag}
+          onPointerUp={finishManagedDrag}
+          onPointerCancel={() => resetManagedDrag("pointer_cancel")}
+          onLostPointerCapture={resetLostCaptureIfDragging}
         >
           <div
             className="sprite-frame"

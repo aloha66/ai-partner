@@ -403,7 +403,7 @@ CODE PATHS                                             USER FLOWS
   ├── [DONE] state event emitted by Rust                  ├── [GAP] corrupt asset shows default partner
   ├── [DONE] renderer subscription pulls current snapshot ├── [GAP] search/switch local partner
   ├── [DONE] minimal bubble/source/status visual          └── [GAP] exit requires confirmation
-  ├── [GAP] physicalStateMachine reducer
+  ├── [DONE/front slice] physicalStateMachine reducer
   └── [DONE] M0 integer scale/frame alignment
 
 [+] TypeScript resolver                                [+] Desktop shell
@@ -431,7 +431,7 @@ CODE PATHS                                             USER FLOWS
 
 LLM integration: [NOT MVP] [->EVAL] only when opt-in LLM or memory ships
 
-COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription + M3 resolver/assets front slice are tested; physical reducer, full asset-driven UI, wrapper and packaging remain planned gaps
+COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription + M3 resolver/assets front slice + T6 physical reducer front slice are tested; full asset-driven UI, wrapper and packaging remain planned gaps
 TARGET: 60/60 planned before MVP acceptance
 QUALITY TARGET: contracts/security/resolver/assets/wrapper need behavior + edge + error tests
 ```
@@ -749,7 +749,7 @@ Acceptance:
 
 目标：renderer 显示状态，不负责外部连接。
 
-Status 2026-06-05：已完成 M2 最小前端状态订阅 slice，并做过 live verification/follow-up。Renderer 启动时调用 `get_current_state`，订阅 Tauri `partner-state-changed` event，在现有 M0 窗口 UI 内显示 workflow state、source、message、paused 和 connection，并把 pause/resume/clear_error 接到前端按钮。`pnpm debug:send running/reading/editing/waiting/error/done`、`pnpm debug:sequence`、pause/resume latest snapshot、error clear、`done -> idle` 均已在本机 Tauri dev app 中复测。默认 520x360 下新增状态区初测裁切 runtime strip，已小幅压缩面板和 companion 尺寸后复测可见。Click-through 在 M0 人工验收仍为通过；M2 follow-up 在干净启动下确认默认布局和不抢焦点，补了入口 `pointerdown` / `mousedown` 触发、按钮 `aria-label`、后端恢复事件 `click-through-restored` 和 renderer 清 banner 闭环。当前 macOS automation 点击/截图路径仍会出现 WebView click 不触发或黑屏，不能作为真实物理手点等价证据；用户已在干净 GUI 会话中真实物理复核通过：banner 显示、点击落到底层 app、6 秒后恢复，恢复后 AI Partner 可再次点击。尚未进入 animation resolver、asset loader、Codex wrapper、右键菜单、partner selection 或完整 physical reducer。
+Status 2026-06-05：已完成 M2 最小前端状态订阅 slice，并做过 live verification/follow-up。Renderer 启动时调用 `get_current_state`，订阅 Tauri `partner-state-changed` event，在现有 M0 窗口 UI 内显示 workflow state、source、message、paused 和 connection，并把 pause/resume/clear_error 接到前端按钮。`pnpm debug:send running/reading/editing/waiting/error/done`、`pnpm debug:sequence`、pause/resume latest snapshot、error clear、`done -> idle` 均已在本机 Tauri dev app 中复测。默认 520x360 下新增状态区初测裁切 runtime strip，已小幅压缩面板和 companion 尺寸后复测可见。Click-through 在 M0 人工验收仍为通过；M2 follow-up 在干净启动下确认默认布局和不抢焦点，补了入口 `pointerdown` / `mousedown` 触发、按钮 `aria-label`、后端恢复事件 `click-through-restored` 和 renderer 清 banner 闭环。当前 macOS automation 点击/截图路径仍会出现 WebView click 不触发或黑屏，不能作为真实物理手点等价证据；用户已在干净 GUI 会话中真实物理复核通过：banner 显示、点击落到底层 app、6 秒后恢复，恢复后 AI Partner 可再次点击。2026-06-06 已完成 T6 最小 physical reducer 切片：`frontend/src/physicalStateMachine.ts` 作为纯 reducer 覆盖 `normal/carried/struggling/falling/recovering` 和 abnormal reset，`App.tsx` 只把现有 drag start/hold/release/cancel 转成 semantic physical state 后交给 resolver。仍未做完整 asset-driven renderer、Codex wrapper、右键菜单或 partner selection。
 
 Tasks:
 
@@ -757,7 +757,7 @@ Tasks:
 - 启动和恢复时调用 `get_current_state`。（已完成最小 slice；resume command 返回 snapshot 后直接更新 UI）
 - CSS/DOM sprite renderer。
 - bubble/status/source badge overlay。（已完成最小 workflow/source/status 展示）
-- `physicalStateMachine` / reducer。
+- `physicalStateMachine` / reducer。（已完成 T6 最小 front slice）
 - drag pointer 坐标用 ref + rAF + CSS transform。
 - 右键菜单：暂停、恢复、切换伴侣、退出确认。
 - 整数缩放和固定 scale preset。
@@ -773,7 +773,7 @@ Acceptance:
 
 目标：没有扩展动画也不空白。
 
-Status 2026-06-05：已完成 M3 最小前置切片，但完整 M3 不标完成。`packages/resolver/` 新增纯 TypeScript `resolveAnimation(snapshot, physicalState, capabilities)`，集中 `AnimationRef` / `PartnerCapabilities` / Petdex legacy fallback，覆盖 workflow normal mapping、physical body override、`waiting/error` 高优先级 bubble、`done` 5 秒队列和过期丢弃、extension -> legacy -> procedural fallback。`packages/assets/` 新增 Petdex/hatch-pet thin loader/validator，集中 Petdex atlas/cell/row 常量，校验 `pet.json`、`spritesheet.webp` metadata、可选 `ai-partner.animations.json`、one assets root scan、relative path sandbox、symlink reject、runtime frame/fps/frame-count budgets，并在损坏资产时 fallback 到默认 Petdex capabilities。Frontend 只做必要 wiring：现有 probe atlas 通过 resolver intent 选择 Petdex 行，不做 UI redesign、不做完整 asset selector、不做 Codex wrapper。仍未做 `physicalStateMachine` reducer、完整 asset-driven sprite renderer、partner switch/search、E2E screenshot sanity 和 M4 wrapper。
+Status 2026-06-05：已完成 M3 最小前置切片，但完整 M3 不标完成。`packages/resolver/` 新增纯 TypeScript `resolveAnimation(snapshot, physicalState, capabilities)`，集中 `AnimationRef` / `PartnerCapabilities` / Petdex legacy fallback，覆盖 workflow normal mapping、physical body override、`waiting/error` 高优先级 bubble、`done` 5 秒队列和过期丢弃、extension -> legacy -> procedural fallback。`packages/assets/` 新增 Petdex/hatch-pet thin loader/validator，集中 Petdex atlas/cell/row 常量，校验 `pet.json`、`spritesheet.webp` metadata、可选 `ai-partner.animations.json`、one assets root scan、relative path sandbox、symlink reject、runtime frame/fps/frame-count budgets，并在损坏资产时 fallback 到默认 Petdex capabilities。Frontend 只做必要 wiring：现有 probe atlas 通过 resolver intent 选择 Petdex 行，不做 UI redesign、不做完整 asset selector、不做 Codex wrapper。2026-06-06 已接入 T6 最小 physical reducer slice；仍未做完整 asset-driven sprite renderer、partner switch/search、E2E screenshot sanity 和 M4 wrapper。
 
 Tasks:
 
@@ -958,6 +958,7 @@ Synthesized from this review's findings. Each task derives from a specific findi
   - Surfaced by: Code Quality Q4, Performance P2
   - Files: `frontend/` or `packages/interaction/`
   - Verify: reducer tests and drag does not rerun resolver per frame
+  - Status: 2026-06-06 T6 front slice done in `frontend/src/physicalStateMachine.ts` with reducer tests and minimal App wiring; full renderer/right-click/selector work remains open under later UI tasks.
 - [ ] **T7 (P1, human: ~1 day / CC: ~45 min)** - Assets - Implement Petdex thin import, validator and fallback
   - Surfaced by: Code Quality Q5, Performance P3/P4
   - Files: `packages/assets/` or `frontend/`
