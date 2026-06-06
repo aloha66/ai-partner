@@ -90,11 +90,19 @@ pnpm tauri:dev
 - macOS automation 沙箱内取证仍不可用：`osascript` 返回 `-10827`，`screencapture` 返回 `could not create image from display`。提权后复核成功：`osascript` 读取窗口为 `AI Partner M0`、位置 `1020,269`、尺寸 `520x360`，前台应用仍为 `Codex`；截图 `/private/tmp/ai-partner-t9-wrapper-waiting-live.png` 显示 UI 处于 `WAITING / Codex is waiting`，`source=codex`，`message=Codex is waiting`，无裁切异常。
 - 本轮验证通过：`pnpm test`、`pnpm --filter @ai-partner/codex-wrapper typecheck`、`pnpm --filter @ai-partner/codex-wrapper build`。
 
+2026-06-06 T8 renderer status 收口：
+
+- T8 最小 renderer 收口已完成：前端使用 CSS/DOM sprite 渲染现有 Petdex/probe atlas，并保留 bubble/status/source overlay；默认 Petdex/probe atlas 已通过 resolver intent 映射选择对应 legacy 行，未引入 UI redesign。
+- 默认 520x360 screenshot/layout sanity 通过；截图证据：`/private/tmp/ai-partner-t8-renderer-520x360.png`。该截图覆盖 sprite、bubble/status overlay、M0 controls 和 runtime strip 在默认窗口内可见，无裁切异常。
+- 验证通过：`pnpm test`、`pnpm --filter @ai-partner/frontend typecheck`、`pnpm --filter @ai-partner/frontend build`。
+- 本轮未跑 `cargo test`，因为 T8 收口未修改 Rust，也未碰 `src-tauri`。
+- 本轮明确不做 UI redesign、不做 partner search/switch、不做多 AI adapter、不碰 `src-tauri`。
+
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
 
 ## M1 Rust State Bridge 进展
 
-2026-06-03 已进入 M1 Rust State Bridge。当前已完成并复核内存状态桥、localhost HTTP ingress + runtime descriptor 的最小闭环，以及本地 debug sender/discovery。2026-06-04 已完成 M2 最小前端状态订阅；2026-06-05 已开始 M3 最小 resolver + asset loader 前置切片；2026-06-06 已完成 T6 最小 physical reducer 切片和 T9 最小 Codex wrapper 本地 live verification。不实现完整 asset-driven renderer、完整 asset loader UI 或多 AI adapter。
+2026-06-03 已进入 M1 Rust State Bridge。当前已完成并复核内存状态桥、localhost HTTP ingress + runtime descriptor 的最小闭环，以及本地 debug sender/discovery。2026-06-04 已完成 M2 最小前端状态订阅；2026-06-05 已开始 M3 最小 resolver + asset loader 前置切片；2026-06-06 已完成 T6 最小 physical reducer 切片、T8 最小 renderer 收口和 T9 最小 Codex wrapper 本地 live verification。不实现完整 asset loader UI、partner search/switch 或多 AI adapter。
 
 已完成：
 
@@ -115,14 +123,15 @@ M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、
 - `frontend/src/tauriWindow.ts`：新增 M2 state bridge，renderer 可调用 `get_current_state`，订阅 `partner-state-changed`，并通过 `pause`、`resume`、`clear_error` 控制 Rust state store；控制命令失败时回拉 `get_current_state` 作为兜底。
 - `frontend/src/App.tsx`：启动时注册 Tauri event listener 并拉取当前 snapshot；现有窗口 UI 中显示 workflow state、source、message、paused、connection，并保留 M0 window controls。Pause/resume/clear error 已接到前端按钮，command 返回 snapshot 后立即更新 UI。
 - `frontend/src/physicalStateMachine.ts`：新增 T6 最小 pure reducer，覆盖 `normal/carried/struggling/falling/recovering` 和 abnormal reset；`App.tsx` 只把现有 drag start/hold/release/cancel 转成 semantic physical state，不改 UI 外观。
+- T8 最小 renderer 收口：现有 frontend 以 CSS/DOM sprite 显示默认 Petdex/probe atlas，并由 resolver intent 映射到默认 Petdex/probe atlas 行；bubble/status/source overlay、workflow 状态和 520x360 默认窗口布局已完成 screenshot sanity，证据为 `/private/tmp/ai-partner-t8-renderer-520x360.png`。
 - `src-tauri/capabilities/m0-window-spike.json`：新增 `core:event:allow-listen`，允许 renderer 订阅 `partner-state-changed`。
 - Frontend tests 覆盖 snapshot display view model、Tauri event update callback 和 state command fallback。
 
 仍未做：
 
 - 真实外部 Codex provider live run 需要用户显式批准后再跑；本轮只完成本地等价 Codex bin live verification。
-- 完整 asset-driven renderer。
 - 完整 asset loader UI、partner search/switch、多 run 聚合 UI。
+- UI redesign、多 AI adapter 仍不在本轮范围；T8 未碰 `src-tauri`。
 
 Debug sender 用法：
 

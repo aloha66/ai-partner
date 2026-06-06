@@ -404,6 +404,8 @@ CODE PATHS                                             USER FLOWS
   ├── [DONE] renderer subscription pulls current snapshot ├── [GAP] search/switch local partner
   ├── [DONE] minimal bubble/source/status visual          └── [GAP] exit requires confirmation
   ├── [DONE/front slice] physicalStateMachine reducer
+  ├── [DONE/T8] CSS/DOM sprite + default Petdex/probe intent mapping
+  ├── [DONE/T8] 520x360 screenshot/layout sanity
   └── [DONE] M0 integer scale/frame alignment
 
 [+] TypeScript resolver                                [+] Desktop shell
@@ -431,7 +433,7 @@ CODE PATHS                                             USER FLOWS
 
 LLM integration: [NOT MVP] [->EVAL] only when opt-in LLM or memory ships
 
-COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription + M3 resolver/assets front slice + T6 physical reducer front slice + T9 minimal Codex wrapper event bridge are tested; full asset-driven UI and packaging remain planned gaps. External Codex provider live run requires explicit user approval before execution.
+COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription + M3 resolver/assets front slice + T6 physical reducer front slice + T8 minimal CSS/DOM sprite renderer + T9 minimal Codex wrapper event bridge are tested; full asset loader UI, partner search/switch and packaging remain planned gaps. External Codex provider live run requires explicit user approval before execution.
 TARGET: 60/60 planned before MVP acceptance
 QUALITY TARGET: contracts/security/resolver/assets/wrapper need behavior + edge + error tests
 ```
@@ -749,14 +751,14 @@ Acceptance:
 
 目标：renderer 显示状态，不负责外部连接。
 
-Status 2026-06-05：已完成 M2 最小前端状态订阅 slice，并做过 live verification/follow-up。Renderer 启动时调用 `get_current_state`，订阅 Tauri `partner-state-changed` event，在现有 M0 窗口 UI 内显示 workflow state、source、message、paused 和 connection，并把 pause/resume/clear_error 接到前端按钮。`pnpm debug:send running/reading/editing/waiting/error/done`、`pnpm debug:sequence`、pause/resume latest snapshot、error clear、`done -> idle` 均已在本机 Tauri dev app 中复测。默认 520x360 下新增状态区初测裁切 runtime strip，已小幅压缩面板和 companion 尺寸后复测可见。Click-through 在 M0 人工验收仍为通过；M2 follow-up 在干净启动下确认默认布局和不抢焦点，补了入口 `pointerdown` / `mousedown` 触发、按钮 `aria-label`、后端恢复事件 `click-through-restored` 和 renderer 清 banner 闭环。当前 macOS automation 点击/截图路径仍会出现 WebView click 不触发或黑屏，不能作为真实物理手点等价证据；用户已在干净 GUI 会话中真实物理复核通过：banner 显示、点击落到底层 app、6 秒后恢复，恢复后 AI Partner 可再次点击。2026-06-06 已完成 T6 最小 physical reducer 切片：`frontend/src/physicalStateMachine.ts` 作为纯 reducer 覆盖 `normal/carried/struggling/falling/recovering` 和 abnormal reset，`App.tsx` 只把现有 drag start/hold/release/cancel 转成 semantic physical state 后交给 resolver。2026-06-06 已完成 T9 最小 Codex wrapper 本地 live verification；仍未做完整 asset-driven renderer、右键菜单或 partner selection。
+Status 2026-06-06：已完成 M2 最小前端状态订阅 slice，并做过 live verification/follow-up。Renderer 启动时调用 `get_current_state`，订阅 Tauri `partner-state-changed` event，在现有 M0 窗口 UI 内显示 workflow state、source、message、paused 和 connection，并把 pause/resume/clear_error 接到前端按钮。`pnpm debug:send running/reading/editing/waiting/error/done`、`pnpm debug:sequence`、pause/resume latest snapshot、error clear、`done -> idle` 均已在本机 Tauri dev app 中复测。默认 520x360 下新增状态区初测裁切 runtime strip，已小幅压缩面板和 companion 尺寸后复测可见。Click-through 在 M0 人工验收仍为通过；M2 follow-up 在干净启动下确认默认布局和不抢焦点，补了入口 `pointerdown` / `mousedown` 触发、按钮 `aria-label`、后端恢复事件 `click-through-restored` 和 renderer 清 banner 闭环。当前 macOS automation 点击/截图路径仍会出现 WebView click 不触发或黑屏，不能作为真实物理手点等价证据；用户已在干净 GUI 会话中真实物理复核通过：banner 显示、点击落到底层 app、6 秒后恢复，恢复后 AI Partner 可再次点击。2026-06-06 已完成 T6 最小 physical reducer 切片：`frontend/src/physicalStateMachine.ts` 作为纯 reducer 覆盖 `normal/carried/struggling/falling/recovering` 和 abnormal reset，`App.tsx` 只把现有 drag start/hold/release/cancel 转成 semantic physical state 后交给 resolver。2026-06-06 已完成 T8 最小 renderer 收口：CSS/DOM sprite、bubble/status/source overlay、默认 Petdex/probe atlas intent 映射和 520x360 screenshot/layout sanity，截图为 `/private/tmp/ai-partner-t8-renderer-520x360.png`。2026-06-06 已完成 T9 最小 Codex wrapper 本地 live verification；仍未做右键菜单或 partner selection。
 
 Tasks:
 
 - 订阅 Tauri state event。（已完成最小 slice）
 - 启动和恢复时调用 `get_current_state`。（已完成最小 slice；resume command 返回 snapshot 后直接更新 UI）
-- CSS/DOM sprite renderer。
-- bubble/status/source badge overlay。（已完成最小 workflow/source/status 展示）
+- CSS/DOM sprite renderer。（已完成 T8 最小 renderer 收口）
+- bubble/status/source badge overlay。（已完成最小 workflow/source/status 展示；T8 已保留 overlay 并做 520x360 sanity）
 - `physicalStateMachine` / reducer。（已完成 T6 最小 front slice）
 - drag pointer 坐标用 ref + rAF + CSS transform。
 - 右键菜单：暂停、恢复、切换伴侣、退出确认。
@@ -764,16 +766,16 @@ Tasks:
 
 Acceptance:
 
-- Mock snapshot 能驱动伴侣状态变化。（已由 M2 state bridge/view-model tests 覆盖）
+- Mock snapshot 能驱动伴侣状态变化。（已由 M2 state bridge/view-model tests 覆盖；T8 已通过默认 Petdex/probe atlas intent 映射显示 CSS/DOM sprite）
 - 拖动不丢 workflow bubble。
 - Renderer 不因 pointermove 每帧重跑 resolver。
-- Live verification：debug CLI 能驱动最小 workflow/status/source/message/paused/connection UI。（已通过；click-through 入口/恢复已小修并通过自动门禁，真实物理点击落到底层 app 已由用户在干净 GUI 会话中手动确认）
+- Live verification：debug CLI 能驱动最小 workflow/status/source/message/paused/connection UI。（已通过；click-through 入口/恢复已小修并通过自动门禁，真实物理点击落到底层 app 已由用户在干净 GUI 会话中手动确认；T8 screenshot sanity 见 `/private/tmp/ai-partner-t8-renderer-520x360.png`）
 
 ### M3: Resolver and Asset Loader
 
 目标：没有扩展动画也不空白。
 
-Status 2026-06-05：已完成 M3 最小前置切片，但完整 M3 不标完成。`packages/resolver/` 新增纯 TypeScript `resolveAnimation(snapshot, physicalState, capabilities)`，集中 `AnimationRef` / `PartnerCapabilities` / Petdex legacy fallback，覆盖 workflow normal mapping、physical body override、`waiting/error` 高优先级 bubble、`done` 5 秒队列和过期丢弃、extension -> legacy -> procedural fallback。`packages/assets/` 新增 Petdex/hatch-pet thin loader/validator，集中 Petdex atlas/cell/row 常量，校验 `pet.json`、`spritesheet.webp` metadata、可选 `ai-partner.animations.json`、one assets root scan、relative path sandbox、symlink reject、runtime frame/fps/frame-count budgets，并在损坏资产时 fallback 到默认 Petdex capabilities。Frontend 只做必要 wiring：现有 probe atlas 通过 resolver intent 选择 Petdex 行，不做 UI redesign、不做完整 asset selector。2026-06-06 已接入 T6 最小 physical reducer slice；2026-06-06 已完成 T9 最小 wrapper event bridge；仍未做完整 asset-driven sprite renderer、partner switch/search 和 E2E screenshot sanity。
+Status 2026-06-06：已完成 M3 最小前置切片，但完整 M3 不标完成。`packages/resolver/` 新增纯 TypeScript `resolveAnimation(snapshot, physicalState, capabilities)`，集中 `AnimationRef` / `PartnerCapabilities` / Petdex legacy fallback，覆盖 workflow normal mapping、physical body override、`waiting/error` 高优先级 bubble、`done` 5 秒队列和过期丢弃、extension -> legacy -> procedural fallback。`packages/assets/` 新增 Petdex/hatch-pet thin loader/validator，集中 Petdex atlas/cell/row 常量，校验 `pet.json`、`spritesheet.webp` metadata、可选 `ai-partner.animations.json`、one assets root scan、relative path sandbox、symlink reject、runtime frame/fps/frame-count budgets，并在损坏资产时 fallback 到默认 Petdex capabilities。Frontend 只做必要 wiring：现有 probe atlas 通过 resolver intent 选择 Petdex 行，不做 UI redesign、不做完整 asset selector。2026-06-06 已接入 T6 最小 physical reducer slice；2026-06-06 已完成 T8 最小 renderer 收口，默认 Petdex/probe atlas intent 映射、CSS/DOM sprite、bubble/status overlay 和 520x360 screenshot/layout sanity 已落地；2026-06-06 已完成 T9 最小 wrapper event bridge；仍未做 partner switch/search。
 
 Tasks:
 
@@ -966,11 +968,11 @@ Synthesized from this review's findings. Each task derives from a specific findi
   - Files: `packages/assets/` or `frontend/`
   - Verify: asset validator tests for dimensions, path sandbox, symlinks and runtime budgets
   - Status: 2026-06-05 M3 front slice done in `packages/assets/` for Petdex thin validation/capabilities; full UI asset switching/search remains open.
-- [ ] **T8 (P1, human: ~1 day / CC: ~45 min)** - Frontend - Render partner with CSS/DOM sprite and bubble overlay
+- [x] **T8 (P1, human: ~1 day / CC: ~45 min)** - Frontend - Render partner with CSS/DOM sprite and bubble overlay
   - Surfaced by: Code Quality Q3, Performance P2/P5
   - Files: `frontend/`
-  - Verify: component tests + screenshot sanity + integer scale checks
-  - Status: M2 minimal state subscription and workflow/source/status display done and live-verified; 2026-06-05 M3 front slice wires resolver intent into the existing probe atlas without redesign. Full asset-driven visuals, component screenshot sanity, integer scale checks and selector UI remain open. Click-through entry/restore received a bounded reliability fix after M2 layout additions; final physical click-through confirmation passed in a clean GUI manual check.
+  - Verify: `pnpm test`; `pnpm --filter @ai-partner/frontend typecheck`; `pnpm --filter @ai-partner/frontend build`; 520x360 screenshot/layout sanity
+  - Status: 2026-06-06 T8 最小 renderer 收口完成。CSS/DOM sprite、bubble/status/source overlay、默认 Petdex/probe atlas intent 映射已落地，并通过默认 520x360 screenshot/layout sanity；截图路径为 `/private/tmp/ai-partner-t8-renderer-520x360.png`。本轮未跑 `cargo test`，因为未改 Rust；未做 UI redesign、partner search/switch、多 AI adapter，也未碰 `src-tauri`。
 - [x] **T9 (P1, human: ~1 day / CC: ~45 min)** - Codex wrapper - Emit real workflow events without code content
   - Surfaced by: Architecture Review A4, Test Review, Outside Voice
   - Files: `scripts/`, `cli/` or `src-tauri/`
