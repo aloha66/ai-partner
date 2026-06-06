@@ -253,6 +253,61 @@ describe("workflow event sender", () => {
       code_context_allowed: false
     });
   });
+
+  it("allows codex-wrapper events only when the caller opts into that source", async () => {
+    const event = {
+      ...createWorkflowEvent({
+        state: "reading",
+        runId: "run_codex_wrapper_sender",
+        timestamp: new Date("2026-06-03T00:00:00Z")
+      }),
+      source: "codex-wrapper" as const
+    };
+    let postedBody: unknown;
+
+    await expectDebugCliError(
+      sendWorkflowEvent(runtimeDescriptor({ port: 43172 }), event, {
+        post: async () => ({ status: 202, body: "{}" })
+      }),
+      "invalid_event"
+    );
+
+    await sendWorkflowEvent(runtimeDescriptor({ port: 43172 }), event, {
+      allowedSources: ["codex-wrapper"],
+      post: async (_descriptor, body) => {
+        postedBody = JSON.parse(body);
+        return { status: 202, body: "{}" };
+      }
+    });
+
+    expect(postedBody).toEqual({
+      schemaVersion: "ai-partner.workflow-event.v1",
+      event_id: event.event_id,
+      source: "codex-wrapper",
+      run_id: "run_codex_wrapper_sender",
+      workflow_state: "reading",
+      timestamp: "2026-06-03T00:00:00.000Z",
+      code_context_allowed: false
+    });
+  });
+
+  it("keeps forbidden payload checks for codex-wrapper events", async () => {
+    const event = {
+      ...createWorkflowEvent({ state: "editing", runId: "run_codex_unsafe_payload" }),
+      source: "codex-wrapper" as const,
+      nested: {
+        code: "secret source"
+      }
+    };
+
+    await expectDebugCliError(
+      sendWorkflowEvent(runtimeDescriptor({ port: 43172 }), event, {
+        allowedSources: ["codex-wrapper"],
+        post: async () => ({ status: 202, body: "{}" })
+      }),
+      "unsafe_payload"
+    );
+  });
 });
 
 function runtimeDescriptor(overrides: Partial<RuntimeDescriptor>): RuntimeDescriptor {

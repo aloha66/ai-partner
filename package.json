@@ -10,8 +10,10 @@
     "debug:discover": "pnpm --filter @ai-partner/debug-cli debug:discover",
     "debug:send": "pnpm --filter @ai-partner/debug-cli debug:send",
     "debug:sequence": "pnpm --filter @ai-partner/debug-cli debug:sequence",
+    "codex:wrap": "pnpm --filter @ai-partner/codex-wrapper codex:wrap",
     "test": "pnpm -r test",
     "test:contracts": "pnpm --filter @ai-partner/contracts test",
+    "test:codex-wrapper": "pnpm --filter @ai-partner/codex-wrapper test",
     "test:debug-cli": "pnpm --filter @ai-partner/debug-cli test",
     "test:frontend": "pnpm --filter @ai-partner/frontend test"
   },

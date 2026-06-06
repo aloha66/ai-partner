@@ -1,0 +1,26 @@
+{
+  "name": "@ai-partner/codex-wrapper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "ai-partner-codex": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "pnpm --filter @ai-partner/debug-cli build && tsc -p tsconfig.json",
+    "codex:wrap": "pnpm run build && node dist/cli.js",
+    "test": "pnpm --filter @ai-partner/debug-cli build && vitest run",
+    "typecheck": "pnpm --filter @ai-partner/debug-cli build && tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-partner/contracts": "workspace:*",
+    "@ai-partner/debug-cli": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  }
+}

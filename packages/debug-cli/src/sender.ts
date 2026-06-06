@@ -1,12 +1,13 @@
 import { request } from "node:http";
 import type { RequestOptions } from "node:http";
-import type { RuntimeDescriptor, WorkflowEventWire } from "@ai-partner/contracts";
+import type { RuntimeDescriptor, WorkflowEventWire, WorkflowSource } from "@ai-partner/contracts";
 import { WORKFLOW_EVENT_SCHEMA_VERSION, defaultPostTimeoutMs } from "./constants.js";
 import { DebugCliError } from "./errors.js";
 import { assertNoForbiddenFields, normalizeMessage } from "./workflowEvent.js";
 
 export interface SendWorkflowEventOptions {
   timeoutMs?: number;
+  allowedSources?: readonly WorkflowSource[];
   post?: (
     descriptor: RuntimeDescriptor,
     body: string,
@@ -19,12 +20,20 @@ export interface SendWorkflowEventResult {
   body: string;
 }
 
+const contractWorkflowSources = [
+  "cli",
+  "codex-wrapper",
+  "demo-script"
+] as const satisfies readonly WorkflowSource[];
+
 export async function sendWorkflowEvent(
   descriptor: RuntimeDescriptor,
   event: WorkflowEventWire,
   options: SendWorkflowEventOptions = {}
 ): Promise<SendWorkflowEventResult> {
-  const payload = workflowEventPayloadForPost(event);
+  const payload = workflowEventPayloadForPost(event, {
+    allowedSources: options.allowedSources
+  });
 
   const body = JSON.stringify(payload);
   if (Buffer.byteLength(body, "utf8") > 4 * 1024) {
@@ -48,13 +57,28 @@ export async function sendWorkflowEvent(
   );
 }
 
-export function workflowEventPayloadForPost(event: WorkflowEventWire): WorkflowEventWire {
+export interface WorkflowEventPayloadOptions {
+  allowedSources?: readonly WorkflowSource[];
+}
+
+export function workflowEventPayloadForPost(
+  event: WorkflowEventWire,
+  options: WorkflowEventPayloadOptions = {}
+): WorkflowEventWire {
   assertNoForbiddenFields(event);
   if (event.schemaVersion !== WORKFLOW_EVENT_SCHEMA_VERSION) {
     throw new DebugCliError("Workflow event schemaVersion is unsupported.", "invalid_event");
   }
-  if (event.source !== "cli") {
-    throw new DebugCliError("Debug sender only emits cli workflow events.", "invalid_event");
+  if (!contractWorkflowSources.includes(event.source)) {
+    throw new DebugCliError("Workflow event source is unsupported.", "invalid_event");
+  }
+
+  const allowedSources: readonly WorkflowSource[] = options.allowedSources ?? ["cli"];
+  if (!allowedSources.includes(event.source)) {
+    throw new DebugCliError(
+      `Workflow event source ${event.source} is not allowed by this sender.`,
+      "invalid_event"
+    );
   }
   if (event.code_context_allowed !== false) {
     throw new DebugCliError("Workflow event code_context_allowed must be false.", "unsafe_payload");

@@ -80,6 +80,25 @@ importers:
         specifier: ^3.0.0
         version: 3.2.6(@types/node@24.12.4)
 
+  packages/codex-wrapper:
+    dependencies:
+      '@ai-partner/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@ai-partner/debug-cli':
+        specifier: workspace:*
+        version: link:../debug-cli
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.12.4
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.6(@types/node@24.12.4)
+
   packages/contracts:
     dependencies:
       ajv:
