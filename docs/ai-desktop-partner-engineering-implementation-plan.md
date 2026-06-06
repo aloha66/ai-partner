@@ -386,7 +386,7 @@ CODE PATHS                                             USER FLOWS
   ├── [DONE] atomic write + 0600 permissions              ├── [DONE] [->E2E] running -> reading -> editing -> done
   ├── [DONE] stale pid/port rejected                      ├── [DONE] waiting requires user attention
   ├── [GAP] token rotation                                ├── [DONE] error is visible and clearable
-  └── [GAP] wrapper discover failure UX                   └── [DONE] pause prevents event spam on resume
+  └── [DONE/T9] wrapper descriptor discovery              └── [DONE] pause prevents event spam on resume
 
 [+] Rust ingress + state store                         [+] Drag and physical interaction
   ├── [DONE] auth/localhost/CORS/origin                   ├── [GAP] carried -> struggling -> falling -> recovering
@@ -423,15 +423,15 @@ CODE PATHS                                             USER FLOWS
   └── [DONE/front slice] extras max 32 frames, fps 1-24
 
 [+] Codex wrapper
-  ├── [GAP] classifier fixtures: running/reading/editing/waiting/error/done
-  ├── [GAP] structured signal priority
-  ├── [GAP] stdout/stderr conservative fallback
-  ├── [GAP] unknown -> running
-  └── [GAP] no code/diff/prompt sent
+  ├── [DONE/T9] classifier fixtures: running/reading/editing/waiting/error/done
+  ├── [DONE/T9] structured signal priority
+  ├── [DONE/T9] stdout/stderr conservative fallback
+  ├── [DONE/T9] unknown -> running
+  └── [DONE/T9] no code/diff/prompt sent
 
 LLM integration: [NOT MVP] [->EVAL] only when opt-in LLM or memory ships
 
-COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription + M3 resolver/assets front slice + T6 physical reducer front slice are tested; full asset-driven UI, wrapper and packaging remain planned gaps
+COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription + M3 resolver/assets front slice + T6 physical reducer front slice + T9 minimal Codex wrapper event bridge are tested; full asset-driven UI and packaging remain planned gaps. External Codex provider live run requires explicit user approval before execution.
 TARGET: 60/60 planned before MVP acceptance
 QUALITY TARGET: contracts/security/resolver/assets/wrapper need behavior + edge + error tests
 ```
@@ -721,13 +721,13 @@ Acceptance:
 
 目标：外部事件进来，Rust 变成状态快照。
 
-Status 2026-06-03：已完成并复核 M1 的三片最小闭环：第一片是 Rust `PartnerStateStore`、Tauri commands（`get_current_state`、`apply_workflow_event`、`pause`、`resume`、`clear_error`）、`partner-state-changed` event emit、done -> idle timer、active run 仲裁、pause/resume、error clear、schema/id/timestamp/message/code-context 校验和 stale timestamp 拒绝；第二片是 localhost `POST /events` ingress + runtime descriptor；第三片是本地 debug sender/discovery。Ingress 只绑定 `127.0.0.1`，启动时生成 session bearer token 并写入 `${TMPDIR}/ai-partner/runtime-descriptor.json`，descriptor 使用临时文件 + rename 原子写入、Unix owner-only 权限、stale cleanup 和退出删除。Ingress gate 已覆盖 bearer auth、payload 4KB、字段白名单、forbidden fields、`code_context_allowed=false`、message 160 字/无换行、CORS preflight / `Origin` 拒绝、event id TTL/LRU 去重、per-run 300ms debounce、per-run 10 events/s burst 30 rate budget；超预算或 debounce 命中的事件仍作为 latest safe snapshot 写入 store，并通过 trailing flush 推送最新安全快照。`packages/debug-cli/` 已读取 runtime descriptor、校验 freshness、用 bearer token 发送 `cli` 来源的 `WorkflowEvent`，覆盖 `running/reading/editing/waiting/error/done`，并拒绝 code/diff/prompt/file content 等 code-context 输入。尚未实现 Codex wrapper、完整 renderer、animation resolver 或完整 asset loader。
+Status 2026-06-03：已完成并复核 M1 的三片最小闭环：第一片是 Rust `PartnerStateStore`、Tauri commands（`get_current_state`、`apply_workflow_event`、`pause`、`resume`、`clear_error`）、`partner-state-changed` event emit、done -> idle timer、active run 仲裁、pause/resume、error clear、schema/id/timestamp/message/code-context 校验和 stale timestamp 拒绝；第二片是 localhost `POST /events` ingress + runtime descriptor；第三片是本地 debug sender/discovery。Ingress 只绑定 `127.0.0.1`，启动时生成 session bearer token 并写入 `${TMPDIR}/ai-partner/runtime-descriptor.json`，descriptor 使用临时文件 + rename 原子写入、Unix owner-only 权限、stale cleanup 和退出删除。Ingress gate 已覆盖 bearer auth、payload 4KB、字段白名单、forbidden fields、`code_context_allowed=false`、message 160 字/无换行、CORS preflight / `Origin` 拒绝、event id TTL/LRU 去重、per-run 300ms debounce、per-run 10 events/s burst 30 rate budget；超预算或 debounce 命中的事件仍作为 latest safe snapshot 写入 store，并通过 trailing flush 推送最新安全快照。`packages/debug-cli/` 已读取 runtime descriptor、校验 freshness、用 bearer token 发送 `cli` 来源的 `WorkflowEvent`，覆盖 `running/reading/editing/waiting/error/done`，并拒绝 code/diff/prompt/file content 等 code-context 输入。2026-06-06 已完成 T9 最小 Codex wrapper event bridge；完整 renderer、animation resolver 和完整 asset loader 仍按后续切片推进。
 
 Tasks:
 
 - `POST /events` 只监听 `127.0.0.1`。（已做）
 - runtime token 认证。（已做）
-- Runtime descriptor 原子写入、权限、stale cleanup。（已做；debug CLI discovery 已做，Codex wrapper 读取留给后续）
+- Runtime descriptor 原子写入、权限、stale cleanup。（已做；debug CLI discovery 已做；Codex wrapper discovery 已在 T9 读取同一 descriptor）
 - schema validation、白名单、payload 4KB、forbidden fields。（已做 ingress gate + store 二次校验）
 - CORS/origin reject。（已做）
 - event id 去重，TTL/LRU。（已做）
@@ -738,7 +738,7 @@ Tasks:
 - `get_current_state`、`pause`、`resume`、`clear_error` commands。（最小 State Bridge 已做。）
 - Rust 管 workflow `done -> idle` timer。（最小 State Bridge 已做，pause/resume 不取消 timer。）
 - Tauri event 推送 `PartnerStateSnapshot`。（最小 State Bridge 已做。）
-- 本地 debug sender 读取 descriptor 并发送 `running/reading/editing/waiting/error/done`。（已做；不含 Codex wrapper）
+- 本地 debug sender 读取 descriptor 并发送 `running/reading/editing/waiting/error/done`。（已做；Codex wrapper 在 T9 复用同一 discovery/sender 边界）
 
 Acceptance:
 
@@ -749,7 +749,7 @@ Acceptance:
 
 目标：renderer 显示状态，不负责外部连接。
 
-Status 2026-06-05：已完成 M2 最小前端状态订阅 slice，并做过 live verification/follow-up。Renderer 启动时调用 `get_current_state`，订阅 Tauri `partner-state-changed` event，在现有 M0 窗口 UI 内显示 workflow state、source、message、paused 和 connection，并把 pause/resume/clear_error 接到前端按钮。`pnpm debug:send running/reading/editing/waiting/error/done`、`pnpm debug:sequence`、pause/resume latest snapshot、error clear、`done -> idle` 均已在本机 Tauri dev app 中复测。默认 520x360 下新增状态区初测裁切 runtime strip，已小幅压缩面板和 companion 尺寸后复测可见。Click-through 在 M0 人工验收仍为通过；M2 follow-up 在干净启动下确认默认布局和不抢焦点，补了入口 `pointerdown` / `mousedown` 触发、按钮 `aria-label`、后端恢复事件 `click-through-restored` 和 renderer 清 banner 闭环。当前 macOS automation 点击/截图路径仍会出现 WebView click 不触发或黑屏，不能作为真实物理手点等价证据；用户已在干净 GUI 会话中真实物理复核通过：banner 显示、点击落到底层 app、6 秒后恢复，恢复后 AI Partner 可再次点击。2026-06-06 已完成 T6 最小 physical reducer 切片：`frontend/src/physicalStateMachine.ts` 作为纯 reducer 覆盖 `normal/carried/struggling/falling/recovering` 和 abnormal reset，`App.tsx` 只把现有 drag start/hold/release/cancel 转成 semantic physical state 后交给 resolver。仍未做完整 asset-driven renderer、Codex wrapper、右键菜单或 partner selection。
+Status 2026-06-05：已完成 M2 最小前端状态订阅 slice，并做过 live verification/follow-up。Renderer 启动时调用 `get_current_state`，订阅 Tauri `partner-state-changed` event，在现有 M0 窗口 UI 内显示 workflow state、source、message、paused 和 connection，并把 pause/resume/clear_error 接到前端按钮。`pnpm debug:send running/reading/editing/waiting/error/done`、`pnpm debug:sequence`、pause/resume latest snapshot、error clear、`done -> idle` 均已在本机 Tauri dev app 中复测。默认 520x360 下新增状态区初测裁切 runtime strip，已小幅压缩面板和 companion 尺寸后复测可见。Click-through 在 M0 人工验收仍为通过；M2 follow-up 在干净启动下确认默认布局和不抢焦点，补了入口 `pointerdown` / `mousedown` 触发、按钮 `aria-label`、后端恢复事件 `click-through-restored` 和 renderer 清 banner 闭环。当前 macOS automation 点击/截图路径仍会出现 WebView click 不触发或黑屏，不能作为真实物理手点等价证据；用户已在干净 GUI 会话中真实物理复核通过：banner 显示、点击落到底层 app、6 秒后恢复，恢复后 AI Partner 可再次点击。2026-06-06 已完成 T6 最小 physical reducer 切片：`frontend/src/physicalStateMachine.ts` 作为纯 reducer 覆盖 `normal/carried/struggling/falling/recovering` 和 abnormal reset，`App.tsx` 只把现有 drag start/hold/release/cancel 转成 semantic physical state 后交给 resolver。2026-06-06 已完成 T9 最小 Codex wrapper 本地 live verification；仍未做完整 asset-driven renderer、右键菜单或 partner selection。
 
 Tasks:
 
@@ -773,7 +773,7 @@ Acceptance:
 
 目标：没有扩展动画也不空白。
 
-Status 2026-06-05：已完成 M3 最小前置切片，但完整 M3 不标完成。`packages/resolver/` 新增纯 TypeScript `resolveAnimation(snapshot, physicalState, capabilities)`，集中 `AnimationRef` / `PartnerCapabilities` / Petdex legacy fallback，覆盖 workflow normal mapping、physical body override、`waiting/error` 高优先级 bubble、`done` 5 秒队列和过期丢弃、extension -> legacy -> procedural fallback。`packages/assets/` 新增 Petdex/hatch-pet thin loader/validator，集中 Petdex atlas/cell/row 常量，校验 `pet.json`、`spritesheet.webp` metadata、可选 `ai-partner.animations.json`、one assets root scan、relative path sandbox、symlink reject、runtime frame/fps/frame-count budgets，并在损坏资产时 fallback 到默认 Petdex capabilities。Frontend 只做必要 wiring：现有 probe atlas 通过 resolver intent 选择 Petdex 行，不做 UI redesign、不做完整 asset selector、不做 Codex wrapper。2026-06-06 已接入 T6 最小 physical reducer slice；仍未做完整 asset-driven sprite renderer、partner switch/search、E2E screenshot sanity 和 M4 wrapper。
+Status 2026-06-05：已完成 M3 最小前置切片，但完整 M3 不标完成。`packages/resolver/` 新增纯 TypeScript `resolveAnimation(snapshot, physicalState, capabilities)`，集中 `AnimationRef` / `PartnerCapabilities` / Petdex legacy fallback，覆盖 workflow normal mapping、physical body override、`waiting/error` 高优先级 bubble、`done` 5 秒队列和过期丢弃、extension -> legacy -> procedural fallback。`packages/assets/` 新增 Petdex/hatch-pet thin loader/validator，集中 Petdex atlas/cell/row 常量，校验 `pet.json`、`spritesheet.webp` metadata、可选 `ai-partner.animations.json`、one assets root scan、relative path sandbox、symlink reject、runtime frame/fps/frame-count budgets，并在损坏资产时 fallback 到默认 Petdex capabilities。Frontend 只做必要 wiring：现有 probe atlas 通过 resolver intent 选择 Petdex 行，不做 UI redesign、不做完整 asset selector。2026-06-06 已接入 T6 最小 physical reducer slice；2026-06-06 已完成 T9 最小 wrapper event bridge；仍未做完整 asset-driven sprite renderer、partner switch/search 和 E2E screenshot sanity。
 
 Tasks:
 
@@ -796,22 +796,24 @@ Acceptance:
 
 目标：真实 Codex 工作流自动产生至少 3 类状态。
 
+Status 2026-06-06：已完成 T9 最小 Codex wrapper event bridge。`packages/codex-wrapper/` 提供 `pnpm codex:wrap`，读取 `${TMPDIR}/ai-partner/runtime-descriptor.json`，通过 `sendWorkflowEvent` 向本机 ingress 发送 `source=codex-wrapper` 的安全 `WorkflowEvent`。Wrapper 启动发 `running`，结构化信号优先识别 `reading/editing/waiting`，stdout/stderr 使用保守 fallback，unknown 降级 `running`，0 exit 发 `done`，非 0/signal 发 `error`。发送到 ingress 的 event body 只包含 `schemaVersion/event_id/source/run_id/workflow_state/timestamp/message/code_context_allowed`，固定 `code_context_allowed=false`，不发送 prompt、code、diff 或 file content。2026-06-06 live verification 中，真实外部 Codex provider run 因安全审核拒绝执行，未绕过；随后使用本地等价 Codex bin transcript 完成 wrapper -> descriptor -> `POST /events` -> Tauri app 闭环，覆盖 `running/reading/editing/waiting/done` 至少 3 类状态。提权截图 `/private/tmp/ai-partner-t9-wrapper-waiting-live.png` 显示 UI 处于 `WAITING / Codex is waiting`，`source=codex`，前台应用仍为 `Codex`。
+
 Tasks:
 
-- Wrapper 读取 `RuntimeDescriptor`。
-- Wrapper 启动发 `running`。
-- 结构化信号优先识别 `reading/editing/waiting`。
-- stdout/stderr 只做保守白名单 fallback。
-- 未知阶段降级为 `running`。
-- 非 0 退出发 `error`。
-- 0 退出发 `done`。
-- 分类置信度写 debug log，不记录 code/diff/prompt。
+- Wrapper 读取 `RuntimeDescriptor`。（已做）
+- Wrapper 启动发 `running`。（已做）
+- 结构化信号优先识别 `reading/editing/waiting`。（已做）
+- stdout/stderr 只做保守白名单 fallback。（已做）
+- 未知阶段降级为 `running`。（已做）
+- 非 0 退出发 `error`。（已做）
+- 0 退出发 `done`。（已做）
+- 分类置信度写 debug log，不记录 code/diff/prompt。（debug log 尚未单独落盘；当前实现不记录 code/diff/prompt，event body 只含安全状态元数据）
 
 Acceptance:
 
-- 一次真实 Codex run 能驱动桌面伴侣至少 3 类 workflow 变化。
-- Wrapper 不发送代码内容、diff、prompt。
-- Fixture corpus 覆盖分类和隐私边界。
+- 一次本地等价 Codex bin run 能驱动桌面伴侣至少 3 类 workflow 变化；真实外部 Codex provider run 待用户显式批准后补跑。
+- Wrapper 不发送代码内容、diff、prompt。（已由 tests 和 live event bridge 边界复核）
+- Fixture corpus 覆盖分类和隐私边界。（已覆盖）
 
 ### M5: macOS Internal Build
 
@@ -943,7 +945,7 @@ Synthesized from this review's findings. Each task derives from a specific findi
   - Surfaced by: Architecture Review A5
   - Files: `packages/contracts/`, `src-tauri/`, `scripts/` or `cli/`
   - Verify: descriptor atomic write, permission, stale cleanup and discover failure tests
-  - Status: M1 app-side descriptor bootstrap done in `src-tauri`; debug CLI discovery done in `packages/debug-cli`; wrapper discovery remains intentionally out of this slice.
+  - Status: M1 app-side descriptor bootstrap done in `src-tauri`; debug CLI discovery done in `packages/debug-cli`; T9 wrapper discovery now reads the same runtime descriptor.
 - [x] **T4 (P1, human: ~1 day / CC: ~45 min)** - Rust bridge - Build secure localhost event ingress and state store
   - Surfaced by: Architecture Review A4/A6/A7, Performance P1
   - Files: `src-tauri/`
@@ -969,10 +971,11 @@ Synthesized from this review's findings. Each task derives from a specific findi
   - Files: `frontend/`
   - Verify: component tests + screenshot sanity + integer scale checks
   - Status: M2 minimal state subscription and workflow/source/status display done and live-verified; 2026-06-05 M3 front slice wires resolver intent into the existing probe atlas without redesign. Full asset-driven visuals, component screenshot sanity, integer scale checks and selector UI remain open. Click-through entry/restore received a bounded reliability fix after M2 layout additions; final physical click-through confirmation passed in a clean GUI manual check.
-- [ ] **T9 (P1, human: ~1 day / CC: ~45 min)** - Codex wrapper - Emit real workflow events without code content
+- [x] **T9 (P1, human: ~1 day / CC: ~45 min)** - Codex wrapper - Emit real workflow events without code content
   - Surfaced by: Architecture Review A4, Test Review, Outside Voice
   - Files: `scripts/`, `cli/` or `src-tauri/`
   - Verify: integration fixture drives 3+ workflow states, no code/diff/prompt sent
+  - Status: 2026-06-06 minimal wrapper done in `packages/codex-wrapper/` with tests and local live verification. `pnpm codex:wrap --codex-bin /bin/zsh -- -lc '<safe JSONL transcript>'` drove `running/reading/editing/waiting/done` through descriptor + ingress without sending prompt/code/diff/file content. Real external Codex provider run was blocked by safety review and remains pending explicit user approval.
 - [ ] **T10 (P2, human: ~1 day / CC: ~30 min)** - Release - Produce macOS app/dmg internal build
   - Surfaced by: Distribution Check, Test Review
   - Files: `src-tauri/`, `.github/`

@@ -78,11 +78,23 @@ pnpm tauri:dev
 - 小修后 `pnpm --filter @ai-partner/frontend typecheck`、`pnpm --filter @ai-partner/frontend test`、`cargo test --manifest-path src-tauri/Cargo.toml` 通过。
 - 用户真实物理 click-through 复核通过：点鼠标图标后 banner 显示，点击可落到底层 app，等待 6 秒后自动恢复，恢复后 AI Partner 可再次点击。
 
+2026-06-06 T9 live verification 记录：
+
+- 启动前工作区状态：分支 `codex/ai-partner-m0-contracts`，HEAD `7281d4a`；工作区仅有未跟踪 `.agents/`，未纳入验证或提交。
+- `pnpm tauri:dev` 沙箱内启动仍因 `127.0.0.1:1420` 监听 `EPERM` 失败；提权后 Tauri dev app 正常启动，Vite 监听 `127.0.0.1:1420`，Rust app 生成 runtime descriptor。
+- Runtime descriptor 位于 `${TMPDIR}/ai-partner/runtime-descriptor.json`，本轮复核文件权限为 `0600`；`pnpm debug:discover` 提权后通过，发现 `http://127.0.0.1:56726/events`，`appInstanceId=app_20260606T024138Z_94708_a5574dc965031407`。
+- 真实外部 Codex run 命令已按安全短 prompt 尝试：`pnpm codex:wrap -- exec --json --sandbox read-only --ephemeral ...`；安全审核因可能让另一个 Codex agent 读取本地仓库而拒绝执行。本轮未绕过该边界，也未发送 prompt/code/diff/file content 到 ingress。
+- 使用等价本地 Codex bin transcript 完成闭环：`pnpm codex:wrap --codex-bin /bin/zsh -- -lc '<safe JSONL transcript>'`。transcript 只输出 `{"workflow_state":"reading"}`、`{"workflow_state":"editing"}`、`{"workflow_state":"waiting"}`，wrapper 启动时补发 `running`，0 退出时补发 `done`。
+- 本地 wrapper -> runtime descriptor discovery -> `POST /events` -> Rust state store/Tauri app 闭环通过；wrapper 命令退出 0 且没有 `ai-partner event bridge failed`，说明 ingress 接受事件。状态类别覆盖 `running/reading/editing/waiting/done`，满足至少 3 类 live verification 要求。
+- 事件 body 隐私边界由 `packages/codex-wrapper/tests/runner.test.ts` 和 `packages/debug-cli/tests/debugCli.test.ts` 复核：发送到 ingress 的 payload 只保留 `schemaVersion/event_id/source/run_id/workflow_state/timestamp/message/code_context_allowed`，`source=codex-wrapper`，`code_context_allowed=false`，不包含 prompt、code、diff 或 file content；wrapper 原样转发子进程 stdout/stderr 到终端不等于发送到 ingress。
+- macOS automation 沙箱内取证仍不可用：`osascript` 返回 `-10827`，`screencapture` 返回 `could not create image from display`。提权后复核成功：`osascript` 读取窗口为 `AI Partner M0`、位置 `1020,269`、尺寸 `520x360`，前台应用仍为 `Codex`；截图 `/private/tmp/ai-partner-t9-wrapper-waiting-live.png` 显示 UI 处于 `WAITING / Codex is waiting`，`source=codex`，`message=Codex is waiting`，无裁切异常。
+- 本轮验证通过：`pnpm test`、`pnpm --filter @ai-partner/codex-wrapper typecheck`、`pnpm --filter @ai-partner/codex-wrapper build`。
+
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
 
 ## M1 Rust State Bridge 进展
 
-2026-06-03 已进入 M1 Rust State Bridge。当前已完成并复核内存状态桥、localhost HTTP ingress + runtime descriptor 的最小闭环，以及本地 debug sender/discovery。2026-06-04 已完成 M2 最小前端状态订阅；2026-06-05 已开始 M3 最小 resolver + asset loader 前置切片；2026-06-06 已完成 T6 最小 physical reducer 切片。不实现 Codex wrapper、完整 asset-driven renderer 或完整 asset loader UI。
+2026-06-03 已进入 M1 Rust State Bridge。当前已完成并复核内存状态桥、localhost HTTP ingress + runtime descriptor 的最小闭环，以及本地 debug sender/discovery。2026-06-04 已完成 M2 最小前端状态订阅；2026-06-05 已开始 M3 最小 resolver + asset loader 前置切片；2026-06-06 已完成 T6 最小 physical reducer 切片和 T9 最小 Codex wrapper 本地 live verification。不实现完整 asset-driven renderer、完整 asset loader UI 或多 AI adapter。
 
 已完成：
 
@@ -98,6 +110,8 @@ M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、
 - `packages/debug-cli/`：新增最小本地 debug sender/discovery，读取 `${TMPDIR}/ai-partner/runtime-descriptor.json`，校验 `schemaVersion`、`pid`、`port`、`token`、`createdAt` 和 endpoint 可达性，然后用 bearer token 向 `POST /events` 发送 `cli` 来源的 `WorkflowEvent`。
 - Debug sender 覆盖 `running`、`reading`、`editing`、`waiting`、`error`、`done`；payload 只生成白名单字段，`code_context_allowed=false`，拒绝 `code`、`diff`、`prompt`、file content 等 code-context 输入。
 - Debug sender tests 覆盖 descriptor missing/stale、endpoint failure、bad token/connection failure、合法事件发送和 forbidden payload 拒绝。
+- `packages/codex-wrapper/`：新增 T9 最小 Codex wrapper event bridge，读取同一 runtime descriptor，启动发 `running`，结构化信号优先识别 `reading/editing/waiting`，stdout/stderr 做保守 fallback，unknown -> `running`，0 exit -> `done`，非 0/signal -> `error`；发送到 ingress 的 event body 只含安全状态元数据。
+- Codex wrapper tests 覆盖 classifier、structured priority、stdout/stderr fallback、unknown fallback、exit mapping、allowed source 和 prompt/code/file content 不进入 ingress payload。
 - `frontend/src/tauriWindow.ts`：新增 M2 state bridge，renderer 可调用 `get_current_state`，订阅 `partner-state-changed`，并通过 `pause`、`resume`、`clear_error` 控制 Rust state store；控制命令失败时回拉 `get_current_state` 作为兜底。
 - `frontend/src/App.tsx`：启动时注册 Tauri event listener 并拉取当前 snapshot；现有窗口 UI 中显示 workflow state、source、message、paused、connection，并保留 M0 window controls。Pause/resume/clear error 已接到前端按钮，command 返回 snapshot 后立即更新 UI。
 - `frontend/src/physicalStateMachine.ts`：新增 T6 最小 pure reducer，覆盖 `normal/carried/struggling/falling/recovering` 和 abnormal reset；`App.tsx` 只把现有 drag start/hold/release/cancel 转成 semantic physical state，不改 UI 外观。
@@ -106,7 +120,7 @@ M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、
 
 仍未做：
 
-- Codex wrapper。
+- 真实外部 Codex provider live run 需要用户显式批准后再跑；本轮只完成本地等价 Codex bin live verification。
 - 完整 asset-driven renderer。
 - 完整 asset loader UI、partner search/switch、多 run 聚合 UI。
 
@@ -116,6 +130,7 @@ Debug sender 用法：
 pnpm debug:discover
 pnpm debug:send running
 pnpm debug:sequence
+pnpm codex:wrap --codex-bin /bin/zsh -- -lc '<safe JSONL transcript>'
 ```
 
 ## 手测步骤
@@ -126,9 +141,10 @@ pnpm debug:sequence
 4. 运行 `pnpm debug:discover`，确认本机 endpoint 可发现。
 5. 运行 `pnpm debug:send running`、`reading`、`editing`、`waiting`、`error`、`done`，确认 workflow、source、message、paused、connection 实时更新，`done` 约 3 秒后回到 `idle`。
 6. 运行 `pnpm debug:sequence`，确认完整状态序列显示；如做节奏敏感复测，可显式使用 `--delay-ms 500`。
-7. 点击 pause/resume/clear_error，确认 pause 后不实时推送、resume 后显示 latest safe snapshot、clear_error 回 `idle`。
-8. 点击鼠标图标进入穿透，确认 banner 显示 `穿透中 / 6s auto restore` 且不裁切；点击 AI Partner 覆盖区域，确认点击落到底层 app；等待 6 秒自动恢复，确认 banner 消失且 AI Partner 图标可再次点击。快捷键未注册不单独判失败；当前 gate 以 6 秒后端自动恢复可靠通过为准。
-9. 在 Mission Control、普通 Space 和 fullscreen app 中确认窗口行为：普通 Space 可见可用，fullscreen app Space 不被 AI Partner 覆盖，回普通桌面后窗口仍可见可用。M0 默认保持 `visibleOnAllWorkspaces: false`。
+7. 运行本地 wrapper 等价 transcript，例如 `pnpm codex:wrap --codex-bin /bin/zsh -- -lc '<safe JSONL transcript>'`，确认 `source=codex-wrapper` 且至少显示 `running/reading/editing/waiting/done` 中 3 类状态；不要在 transcript 或 prompt 中包含 code/diff/file content。
+8. 点击 pause/resume/clear_error，确认 pause 后不实时推送、resume 后显示 latest safe snapshot、clear_error 回 `idle`。
+9. 点击鼠标图标进入穿透，确认 banner 显示 `穿透中 / 6s auto restore` 且不裁切；点击 AI Partner 覆盖区域，确认点击落到底层 app；等待 6 秒自动恢复，确认 banner 消失且 AI Partner 图标可再次点击。快捷键未注册不单独判失败；当前 gate 以 6 秒后端自动恢复可靠通过为准。
+10. 在 Mission Control、普通 Space 和 fullscreen app 中确认窗口行为：普通 Space 可见可用，fullscreen app Space 不被 AI Partner 覆盖，回普通桌面后窗口仍可见可用。M0 默认保持 `visibleOnAllWorkspaces: false`。
 
 ## M0 工具按钮
 
