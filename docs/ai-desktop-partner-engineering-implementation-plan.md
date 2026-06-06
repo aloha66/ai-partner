@@ -822,6 +822,8 @@ Acceptance:
 
 目标：可交付本机内测包。
 
+Status 2026-06-06：M5 尚未完成；本轮只做 packaging smoke gate 前置收口。当前 `src-tauri/tauri.conf.json` 已配置 `bundle.active=true`、`bundle.targets=["dmg"]`、`beforeBuildCommand=pnpm --filter @ai-partner/frontend build` 和 `frontendDist=../frontend/dist`，因此暂不修改 `src-tauri`。新增根级 `pnpm smoke:dmg:preflight`、`pnpm tauri:build`、`pnpm package:dmg`，用于在正式 DMG build 前锁住配置和命令入口。T6/T8/T9 已完成的是最小 physical/renderer/wrapper 闭环；完整产品 UI、asset selector、partner search/switch、多 AI adapter 不属于 M5 前置收口。
+
 Tasks:
 
 - macOS app/dmg build。
@@ -830,6 +832,18 @@ Tasks:
 - GitHub Releases 预留 artifact 上传。
 - Windows build 只做后续 lane，不承诺同等体验。
 - DMG smoke gate。
+
+DMG smoke checklist:
+
+1. 运行 `pnpm smoke:dmg:preflight`，确认 Tauri build、DMG target、默认窗口和不抢焦点配置未漂移。
+2. 运行 `pnpm package:dmg` 生成 macOS DMG；若只需定位 build 问题，可单独运行 `pnpm tauri:build`。
+3. 挂载 DMG，把 packaged app 安装到临时位置或 Applications，并从 packaged app 启动，不用 `pnpm tauri:dev`。
+4. 保持终端或编辑器为前台输入应用，确认 AI Partner 首次启动后默认伴侣可见，且前台应用没有切到 AI Partner。
+5. 运行 `pnpm debug:discover`，确认 packaged app 写出的 runtime descriptor 可发现，endpoint 指向 `127.0.0.1`。
+6. 复核 `${TMPDIR}/ai-partner/runtime-descriptor.json` 权限为 `0600`，并确认 token 未写入仓库或日志。
+7. 运行 `pnpm debug:send waiting`，确认 packaged app UI 显示 waiting/source/message；再运行 `pnpm debug:send done`，确认状态可回到 idle。
+8. 点击进入 click-through，确认点击落到底层 app，等待 6 秒后自动恢复；快捷键未注册不单独判失败。
+9. 记录签名、公证、Gatekeeper 提示和 DMG 安装路径问题；这些风险进入 release checklist，不扩展本轮产品 UI。
 
 Acceptance:
 
@@ -981,8 +995,9 @@ Synthesized from this review's findings. Each task derives from a specific findi
   - Status: 2026-06-06 minimal wrapper done in `packages/codex-wrapper/` with tests and local live verification. `pnpm codex:wrap --codex-bin /bin/zsh -- -lc '<safe JSONL transcript>'` drove `running/reading/editing/waiting/done` through descriptor + ingress without sending prompt/code/diff/file content. Real external Codex provider run was blocked by safety review and remains pending explicit user approval.
 - [ ] **T10 (P2, human: ~1 day / CC: ~30 min)** - Release - Produce macOS app/dmg internal build
   - Surfaced by: Distribution Check, Test Review
-  - Files: `src-tauri/`, `.github/`
-  - Verify: Tauri build, install smoke, endpoint reachable, no focus stealing
+  - Files: `package.json`, `scripts/`, `docs/`, `src-tauri/` only if Tauri packaging requires it
+  - Verify: `pnpm smoke:dmg:preflight`, Tauri build, install smoke, endpoint reachable, no focus stealing
+  - Status: 2026-06-06 M5 前置收口已补 root scripts、只读 packaging preflight 和 DMG smoke checklist；正式 DMG build/install smoke 仍未执行，T10 不标完成。
 - [ ] **T11 (P3, human: ~1h / CC: ~10 min)** - Product docs - Align BRD first-version messaging with MVP scope
   - Surfaced by: Outside Voice
   - Files: `docs/ai-desktop-partner-business-requirements.md`, `TODOS.md`

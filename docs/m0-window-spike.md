@@ -112,6 +112,14 @@ pnpm tauri:dev
 - Resolver/renderer 语义补测完成：`waiting/error` bubble 在 `carried/struggling/falling/recovering` 下仍保留 workflow state/text/high priority，只替换 body motion；queued `done` 在 recovery 后进入同一 CSS/DOM sprite model 补播，且新 workflow 会丢弃旧 queued done。
 - 本轮文档把 T6/T8 表述限定为最小 CSS/DOM sprite renderer 集成；右键菜单、selector、partner search/switch 和完整产品 UI 仍属后续范围。
 
+2026-06-06 M5/macOS packaging smoke gate 前置收口：
+
+- 当前 Tauri package 路径已复核：`src-tauri/tauri.conf.json` 的 `build.beforeBuildCommand` 会运行 `pnpm --filter @ai-partner/frontend build`，`frontendDist` 指向 `../frontend/dist`，`bundle.active=true` 且 `bundle.targets=["dmg"]`。
+- 本轮未修改 `src-tauri`，因为 DMG target、透明无边框、置顶、不可聚焦和普通 Space 默认策略已在既有配置中满足 M5 smoke 前置要求。
+- 新增根级命令：`pnpm smoke:dmg:preflight` 只读检查 packaging/smoke 关键配置；`pnpm tauri:build` 固化 Tauri build 入口；`pnpm package:dmg` 先跑 preflight 再 build。
+- DMG smoke gate 固定为安装后人工复核：默认伴侣可见、本地 runtime descriptor/endpoint 可发现、`pnpm debug:send waiting` 可驱动 packaged app、启动不抢当前输入焦点、descriptor 文件权限仍为 `0600`。
+- 已完成的 T6/T8/T9 仍只代表 physical reducer + CSS/DOM sprite renderer + Codex wrapper 最小闭环；完整产品 UI、asset selector、partner search/switch、多 AI adapter 仍未做，也不属于本轮范围。
+
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
 
 ## M1 Rust State Bridge 进展
