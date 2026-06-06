@@ -12,7 +12,6 @@ import {
   ShieldCheck
 } from "lucide-react";
 import {
-  CLICK_THROUGH_RECOVERY_SHORTCUT,
   applyM0WindowDefaults,
   clearPartnerError,
   currentCursorPosition,
@@ -85,12 +84,16 @@ function statusText(status: SpikeStatus | null, key: keyof SpikeStatus): string 
   return statusLabels[key]?.[value] ?? value;
 }
 
+function runtimeRunStatus(runLabel: string): string {
+  return runLabel === "no active run" ? "r0" : "r1";
+}
+
 export function App() {
   const [status, setStatus] = useState<SpikeStatus | null>(null);
   const [clickThrough, setClickThrough] = useState(false);
-  const [recoveryStatus, setRecoveryStatus] = useState(CLICK_THROUGH_RECOVERY_SHORTCUT);
+  const [recoveryStatus, setRecoveryStatus] = useState("auto");
   const [partnerState, setPartnerState] = useState(idlePartnerState);
-  const [stateCommandStatus, setStateCommandStatus] = useState("state controls ready");
+  const [stateCommandStatus, setStateCommandStatus] = useState("ok");
   const recoveryTimerRef = useRef<number | null>(null);
   const [frameIndex, setFrameIndex] = useState(0);
   const [physicalMachine, dispatchPhysical] = useReducer(
@@ -133,11 +136,11 @@ export function App() {
         shortcutCleanup = registration.cleanup;
         setRecoveryStatus(
           registration.shortcuts.length > 0
-            ? `shortcut: ${registration.shortcuts.join(" / ")}`
-            : `auto restore only (${registration.errors[0] ?? "shortcut unavailable"})`
+            ? "key"
+            : "auto"
         );
       })
-      .catch((error) => setRecoveryStatus(`auto restore only (${String(error)})`));
+      .catch(() => setRecoveryStatus("auto"));
     listenClickThroughRestored(clearClickThroughState)
       .then((unlisten) => {
         restoreCleanup = unlisten;
@@ -166,7 +169,7 @@ export function App() {
           if (!disposed) {
             stateRevisionRef.current += 1;
             setPartnerState(snapshot);
-            setStateCommandStatus("state event received");
+            setStateCommandStatus("evt");
           }
         });
         if (disposed) {
@@ -183,7 +186,7 @@ export function App() {
         if (!disposed && stateRevisionRef.current === startupRevision) {
           stateRevisionRef.current += 1;
           setPartnerState(snapshot);
-          setStateCommandStatus("startup snapshot loaded");
+          setStateCommandStatus("snap");
         }
       } catch {
         // Keep the local idle fallback if Tauri is not ready yet.
@@ -326,12 +329,12 @@ export function App() {
     }
 
     setClickThrough(true);
-    setRecoveryStatus((value) => `${value}; auto in 6s`);
+    setRecoveryStatus("6s");
     recoveryTimerRef.current = window.setTimeout(() => {
       recoveryTimerRef.current = null;
       leaveClickThrough()
         .then(() => setClickThrough(false))
-        .catch(() => setRecoveryStatus("auto restore failed"));
+        .catch(() => setRecoveryStatus("fail"));
       }, 6000);
 
     try {
@@ -347,7 +350,7 @@ export function App() {
         recoveryTimerRef.current = null;
       }
       setClickThrough(false);
-      setRecoveryStatus("click-through failed");
+      setRecoveryStatus("fail");
     }
   }
 
@@ -358,11 +361,11 @@ export function App() {
       setPartnerState(result.snapshot);
       setStateCommandStatus(
         result.usedFallback
-          ? `command fallback: ${result.error ?? "unknown error"}`
-          : "command applied"
+          ? "fb"
+          : "ok"
       );
-    } catch (error) {
-      setStateCommandStatus(`command failed: ${String(error)}`);
+    } catch {
+      setStateCommandStatus("fail");
     }
   }
 
@@ -492,9 +495,9 @@ export function App() {
 
         <div className="runtime-strip">
           <Move size={14} aria-hidden />
-          <span>{dragging ? "managed drag" : "sprite renderer"}</span>
+          <span>{dragging ? "drg" : "spr"}</span>
           <ArrowDownToLine size={14} aria-hidden />
-          <span>{stateDisplay.runLabel}</span>
+          <span>{runtimeRunStatus(stateDisplay.runLabel)}</span>
           <span>{stateCommandStatus}</span>
           <span>{recoveryStatus}</span>
         </div>

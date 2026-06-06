@@ -7,13 +7,34 @@ import {
 import {
   legacyAnimationByPetdexRow,
   PETDEX_COLUMNS,
+  PETDEX_ATLAS_HEIGHT,
+  PETDEX_ATLAS_WIDTH,
   type PetdexRow
 } from "@ai-partner/assets/petdex";
 import { spriteFrame, type SpriteFrame } from "./spriteProbe";
 
-const petdexRowByLegacyAnimation = Object.fromEntries(
-  Object.entries(legacyAnimationByPetdexRow).map(([row, animation]) => [animation, row])
-) as Partial<Record<AnimationRef, PetdexRow>>;
+export const DEFAULT_SPRITE_SCALE = 7 / 8;
+
+const canonicalPetdexRows = {
+  "workflow.idle": "idle",
+  "workflow.running": "running",
+  "workflow.reading": "review",
+  "workflow.editing": "running",
+  "workflow.waiting": "waiting",
+  "workflow.error": "failed",
+  "workflow.done": "waving",
+  "physical.carried": "idle",
+  "physical.struggling": "running-left",
+  "physical.falling": "idle",
+  "physical.recovering": "idle"
+} as const satisfies Partial<Record<AnimationRef, PetdexRow>>;
+
+const petdexRowByAnimation = {
+  ...Object.fromEntries(
+    Object.entries(legacyAnimationByPetdexRow).map(([row, animation]) => [animation, row])
+  ),
+  ...canonicalPetdexRows
+} as Partial<Record<AnimationRef, PetdexRow>>;
 
 export interface SpriteRenderModel {
   animation: AnimationRef;
@@ -41,7 +62,7 @@ export interface PartnerRendererProps extends SpriteRendererProps {
 }
 
 export function petdexRowForAnimation(animation: AnimationRef): PetdexRow {
-  return petdexRowByLegacyAnimation[animation] ?? "idle";
+  return petdexRowByAnimation[animation] ?? "idle";
 }
 
 export function normalizeSpriteColumn(frameIndex: number): number {
@@ -51,6 +72,10 @@ export function normalizeSpriteColumn(frameIndex: number): number {
   return ((Math.trunc(frameIndex) % PETDEX_COLUMNS) + PETDEX_COLUMNS) % PETDEX_COLUMNS;
 }
 
+function scaledSpritePixels(value: number): number {
+  return value * DEFAULT_SPRITE_SCALE;
+}
+
 export function spriteRenderModelForIntent(
   intent: AnimationIntent,
   frameIndex: number,
@@ -58,6 +83,8 @@ export function spriteRenderModelForIntent(
 ): SpriteRenderModel {
   const row = petdexRowForAnimation(intent.body.animation);
   const frame = spriteFrame(row, normalizeSpriteColumn(frameIndex));
+  const width = scaledSpritePixels(frame.width);
+  const height = scaledSpritePixels(frame.height);
   const procedural = [...intent.body.procedural].sort();
   const className = [
     "sprite-frame",
@@ -73,11 +100,13 @@ export function spriteRenderModelForIntent(
     loop: intent.body.loop,
     procedural,
     style: {
-      width: frame.width,
-      height: frame.height,
+      width,
+      height,
       backgroundImage: `url("${atlasUrl}")`,
-      backgroundSize: frame.backgroundSize,
-      backgroundPosition: frame.backgroundPosition
+      backgroundSize: `${scaledSpritePixels(PETDEX_ATLAS_WIDTH)}px ${scaledSpritePixels(
+        PETDEX_ATLAS_HEIGHT
+      )}px`,
+      backgroundPosition: `-${frame.columnIndex * width}px -${frame.rowIndex * height}px`
     }
   };
 }
@@ -90,6 +119,7 @@ export function SpriteRenderer({ intent, frameIndex, atlasUrl }: SpriteRendererP
       className={model.className}
       data-animation={model.animation}
       data-loop={model.loop ? "true" : "false"}
+      data-sprite-scale={DEFAULT_SPRITE_SCALE}
       data-sprite-column={model.frame.columnIndex}
       data-sprite-row={model.row}
       style={model.style}

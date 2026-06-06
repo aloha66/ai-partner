@@ -9,7 +9,8 @@ import { resolvePartnerIntent } from "./animationIntentView";
 import {
   normalizeSpriteColumn,
   petdexRowForAnimation,
-  spriteRenderModelForIntent
+  spriteRenderModelForIntent,
+  DEFAULT_SPRITE_SCALE
 } from "./spriteRenderer";
 
 function snapshot(
@@ -31,6 +32,18 @@ function snapshot(
 }
 
 describe("sprite renderer model", () => {
+  it("uses an integer default scale for the 520x360 renderer footprint", () => {
+    expect(DEFAULT_SPRITE_SCALE).toBe(0.875);
+    const model = spriteRenderModelForIntent(resolvePartnerIntent(snapshot("idle"), "normal"), 0, "probe-atlas");
+
+    expect(model.style).toMatchObject({
+      width: 168,
+      height: 182,
+      backgroundSize: "1344px 1638px",
+      backgroundPosition: "-0px -0px"
+    });
+  });
+
   it("maps resolver legacy animations to Petdex atlas rows", () => {
     const intent = resolvePartnerIntent(snapshot("reading"), "normal");
     const model = spriteRenderModelForIntent(intent, 3, "probe-atlas");
@@ -44,13 +57,36 @@ describe("sprite renderer model", () => {
       backgroundPosition: "-576px -1664px"
     });
     expect(model.style).toMatchObject({
-      width: 192,
-      height: 208,
+      width: 168,
+      height: 182,
       backgroundImage: 'url("probe-atlas")',
-      backgroundSize: "1536px 1872px",
-      backgroundPosition: "-576px -1664px"
+      backgroundSize: "1344px 1638px",
+      backgroundPosition: "-504px -1456px"
     });
     expect(model.className).toBe("sprite-frame is-looping");
+  });
+
+  it("keeps every default workflow state on a visible Petdex probe row", () => {
+    expect(Object.fromEntries(
+      (["idle", "running", "reading", "editing", "waiting", "error", "done"] as const).map(
+        (workflowState) => {
+          const model = spriteRenderModelForIntent(
+            resolvePartnerIntent(snapshot(workflowState), "normal"),
+            0,
+            "probe-atlas"
+          );
+          return [workflowState, model.row];
+        }
+      )
+    )).toEqual({
+      idle: "idle",
+      running: "running",
+      reading: "review",
+      editing: "running",
+      waiting: "waiting",
+      error: "failed",
+      done: "waving"
+    });
   });
 
   it("keeps physical procedural effects in DOM-ready classes", () => {
@@ -72,11 +108,32 @@ describe("sprite renderer model", () => {
     expect(spriteRenderModelForIntent(intent, 10, "probe-atlas").frame.columnIndex).toBe(2);
   });
 
+  it("maps canonical intent refs to default Petdex rows before legacy fallback", () => {
+    const canonicalByRow: Array<[AnimationIntent["body"]["animation"], string]> = [
+      ["workflow.idle", "idle"],
+      ["workflow.running", "running"],
+      ["workflow.reading", "review"],
+      ["workflow.editing", "running"],
+      ["workflow.waiting", "waiting"],
+      ["workflow.error", "failed"],
+      ["workflow.done", "waving"],
+      ["physical.carried", "idle"],
+      ["physical.struggling", "running-left"],
+      ["physical.falling", "idle"],
+      ["physical.recovering", "idle"]
+    ];
+
+    expect(Object.fromEntries(canonicalByRow.map(([animation]) => [
+      animation,
+      petdexRowForAnimation(animation)
+    ]))).toEqual(Object.fromEntries(canonicalByRow));
+  });
+
   it("falls back unknown non-legacy body animations to the idle row", () => {
     const intent: AnimationIntent = {
       schemaVersion: ANIMATION_INTENT_SCHEMA_VERSION,
       body: {
-        animation: "workflow.reading",
+        animation: "workflow.unknown",
         procedural: [],
         loop: true
       },

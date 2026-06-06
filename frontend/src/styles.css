@@ -1,4 +1,28 @@
 :root {
+  --t8-window-default-width: 520px;
+  --t8-window-default-height: 360px;
+  --t8-window-padding: 8px;
+  --t8-window-gap: 8px;
+  --t8-panel-width: 184px;
+  --t8-panel-padding: 6px;
+  --t8-panel-border: 1px;
+  --t8-companion-min-width: 220px;
+  --t8-companion-gap: 4px;
+  --t8-bubble-max-width: 280px;
+  --t8-bubble-max-height: 46px;
+  --t8-bubble-padding-y: 6px;
+  --t8-bubble-border: 1px;
+  --t8-bubble-gap: 3px;
+  --t8-bubble-label-font-size: 10px;
+  --t8-bubble-label-line-height: 10px;
+  --t8-bubble-message-font-size: 13px;
+  --t8-bubble-message-line-height: 16px;
+  --t8-sprite-width: 168px;
+  --t8-sprite-height: 182px;
+  --t8-click-banner-width: 168px;
+  --t8-click-banner-padding: 5px;
+  --t8-click-banner-border: 1px;
+  --t8-click-banner-line-height: 12px;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #101318;
@@ -25,10 +49,10 @@ button {
   box-sizing: border-box;
   width: 100vw;
   height: 100vh;
-  padding: 8px;
+  padding: var(--t8-window-padding);
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) 184px;
-  gap: 8px;
+  grid-template-columns: minmax(var(--t8-companion-min-width), 1fr) var(--t8-panel-width);
+  gap: var(--t8-window-gap);
   align-items: end;
   background:
     linear-gradient(90deg, rgb(16 19 24 / 0.08) 1px, transparent 1px),
@@ -42,38 +66,45 @@ button {
   display: grid;
   align-content: end;
   justify-items: center;
-  gap: 4px;
+  gap: var(--t8-companion-gap);
 }
 
 .bubble {
-  max-width: min(280px, 100%);
-  padding: 6px 9px;
-  border: 1px solid rgb(16 19 24 / 0.16);
+  box-sizing: border-box;
+  max-width: min(var(--t8-bubble-max-width), 100%);
+  max-height: var(--t8-bubble-max-height);
+  padding: var(--t8-bubble-padding-y) 9px;
+  border: var(--t8-bubble-border) solid rgb(16 19 24 / 0.16);
   border-radius: 8px;
   background: rgb(255 255 255 / 0.82);
   box-shadow: 0 8px 24px rgb(16 19 24 / 0.16);
   backdrop-filter: blur(10px);
   display: grid;
-  gap: 3px;
+  gap: var(--t8-bubble-gap);
+  overflow: hidden;
 }
 
 .bubble span {
-  font-size: 10px;
-  line-height: 1;
+  font-size: var(--t8-bubble-label-font-size);
+  line-height: var(--t8-bubble-label-line-height);
   color: #0e7490;
   text-transform: uppercase;
 }
 
 .bubble strong {
-  font-size: 13px;
-  line-height: 1.2;
+  font-size: var(--t8-bubble-message-font-size);
+  line-height: var(--t8-bubble-message-line-height);
   font-weight: 650;
-  word-break: keep-all;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
 }
 
 .partner {
-  width: 172px;
-  height: 187px;
+  width: var(--t8-sprite-width);
+  height: var(--t8-sprite-height);
   cursor: grab;
   touch-action: none;
   user-select: none;
@@ -90,7 +121,6 @@ button {
   background-color: transparent;
   transform: translateZ(0);
   transform-origin: bottom center;
-  scale: 0.895833;
 }
 
 .sprite-frame.effect-shake {
@@ -133,8 +163,8 @@ button {
 
 .spike-panel {
   align-self: end;
-  padding: 6px;
-  border: 1px solid rgb(16 19 24 / 0.14);
+  padding: var(--t8-panel-padding);
+  border: var(--t8-panel-border) solid rgb(16 19 24 / 0.14);
   border-radius: 8px;
   background: rgb(248 250 252 / 0.84);
   box-shadow: 0 10px 28px rgb(16 19 24 / 0.18);
@@ -261,10 +291,12 @@ button {
 }
 
 .runtime-strip {
+  box-sizing: border-box;
   min-height: 16px;
   color: #334155;
   font-size: 9px;
   overflow: hidden;
+  flex-wrap: nowrap;
 }
 
 .runtime-strip span {
@@ -275,17 +307,18 @@ button {
 
 .click-through-banner {
   position: fixed;
-  right: 8px;
-  bottom: 8px;
+  right: var(--t8-window-padding);
+  bottom: var(--t8-window-padding);
   z-index: 20;
   box-sizing: border-box;
-  width: 168px;
-  padding: 5px;
-  border: 1px solid #f59e0b;
+  width: var(--t8-click-banner-width);
+  padding: var(--t8-click-banner-padding);
+  border: var(--t8-click-banner-border) solid #f59e0b;
   border-radius: 6px;
   background: #fffbeb;
   color: #7c2d12;
   font-size: 10px;
+  line-height: var(--t8-click-banner-line-height);
   justify-content: space-between;
 }
 
