@@ -907,21 +907,15 @@ Critical gaps after review: none. Implementation cannot pass MVP until tests and
 - Windows 体验对等发布：MVP 先 macOS，Windows 后置。
 - Mac App Store：透明窗口 private API 风险未解，先 direct DMG。
 
-## TODO Candidates
+## Resolved TODOs
 
 ### TODO-1: 调整 BRD 首版对外口径
 
-What: 把 [ai-desktop-partner-business-requirements.md](ai-desktop-partner-business-requirements.md) 的首版口径改成 “macOS Codex technical preview / AI status companion”，并把多 AI、陪伴模式、深度互动、记忆、Windows 等标为 roadmap。
+Status: 已完成，2026-06-07。
 
-Why: 工程计划锁定的是 macOS + Codex + 状态反馈层 MVP。BRD 面向产品、销售、客户成功，如果继续把 roadmap 能力写在核心功能总览里，容易被误读为首版承诺。
+Resolution: 已把 [ai-desktop-partner-business-requirements.md](ai-desktop-partner-business-requirements.md) 的首版口径改成 “macOS Codex technical preview / AI status companion”，并明确当前 MVP 是 macOS + Codex wrapper/debug CLI + Petdex-like 本机内测/CLI 驱动安装 + 状态反馈桌面伴侣。
 
-Pros: 对外沟通和工程交付一致，减少 demo/内测时期的承诺错位。
-
-Cons: 需要另开文档编辑轮，不能在这份工程计划里替代 BRD。
-
-Context: Outside voice 指出业务需求功能表比 MVP 宽。用户选择将此作为 TODO，而不是本轮直接修改 BRD。
-
-Depends on / blocked by: 无；建议在第一版实现前完成。
+Roadmap clarification: 多 AI、陪伴模式、深度互动、记忆/长期人格、Windows、partner search/switch、asset marketplace 等均已标为 roadmap，不作为首版承诺。
 
 ## Parallel Worktree Strategy
 
@@ -1014,10 +1008,11 @@ Synthesized from this review's findings. Each task derives from a specific findi
   - Files: `package.json`, `scripts/`, `docs/`, `src-tauri/` only if Tauri packaging requires it
   - Verify: `pnpm smoke:dmg:preflight`, Tauri build, install smoke, endpoint reachable, no focus stealing
   - Status: 2026-06-07 M5 packaged app/DMG internal smoke 通过；产物 `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/dmg/AI Partner_0.1.0_aarch64.dmg`，安装到临时路径并从 packaged app 启动，endpoint/debug/focus/descriptor/click-through 复核通过；签名/公证/Gatekeeper 风险列入 release checklist。
-- [ ] **T11 (P3, human: ~1h / CC: ~10 min)** - Product docs - Align BRD first-version messaging with MVP scope
+- [x] **T11 (P3, human: ~1h / CC: ~10 min)** - Product docs - Align BRD first-version messaging with MVP scope
   - Surfaced by: Outside Voice
   - Files: `docs/ai-desktop-partner-business-requirements.md`, `TODOS.md`
   - Verify: BRD labels non-MVP capabilities as roadmap
+  - Status: 2026-06-07 completed. BRD now labels first version as “macOS Codex technical preview / AI status companion”, defines the MVP as macOS + Codex wrapper/debug CLI + Petdex-like local internal/CLI-driven install + status feedback desktop companion, and moves multi AI, companion mode, deep interaction, memory/long-term personality, Windows, partner search/switch, and asset marketplace to roadmap.
 
 ## Completion Summary
 
