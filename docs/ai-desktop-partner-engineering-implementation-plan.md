@@ -417,9 +417,9 @@ CODE PATHS                                             USER FLOWS
   └── [DONE/front slice] extension -> legacy -> procedural fallback
 
 [+] Asset loader + validator                           [+] macOS internal build
-  ├── [DONE/front slice] pet.json required fields         ├── [GAP] [->E2E/manual] DMG install launches
-  ├── [DONE/front slice] spritesheet exists               ├── [GAP] debug CLI can reach endpoint
-  ├── [DONE/front slice] 1536x1872 atlas                  └── [GAP] diagnostic logs do not leak code
+  ├── [DONE/front slice] pet.json required fields         ├── [DONE/M5] DMG install launches packaged app
+  ├── [DONE/front slice] spritesheet exists               ├── [DONE/M5] debug CLI reaches packaged endpoint
+  ├── [DONE/front slice] 1536x1872 atlas                  └── [DONE/M5] runtime token omitted from docs/logs
   ├── [DONE/front slice] 192x208 runtime frame
   ├── [DONE/front slice] optional ai-partner.animations.json
   ├── [DONE/front slice] root sandbox/path traversal/symlink reject
@@ -434,7 +434,7 @@ CODE PATHS                                             USER FLOWS
 
 LLM integration: [NOT MVP] [->EVAL] only when opt-in LLM or memory ships
 
-COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription + M3 resolver/assets front slice + T5/T7 renderer integration closeout + T6 minimal physical/renderer integration closeout + T8 minimal CSS/DOM sprite renderer + T9 minimal Codex wrapper event bridge are tested; full asset loader UI, partner search/switch and packaging remain planned gaps. External Codex provider live run requires explicit user approval before execution.
+COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription + M3 resolver/assets front slice + T5/T7 renderer integration closeout + T6 minimal physical/renderer integration closeout + T8 minimal CSS/DOM sprite renderer + T9 minimal Codex wrapper event bridge + M5 packaged app/DMG smoke are tested; full asset loader UI and partner search/switch remain planned gaps. External Codex provider live run requires explicit user approval before execution.
 TARGET: 60/60 planned before MVP acceptance
 QUALITY TARGET: contracts/security/resolver/assets/wrapper need behavior + edge + error tests
 ```
@@ -822,7 +822,21 @@ Acceptance:
 
 目标：可交付本机内测包。
 
-Status 2026-06-06：M5 尚未完成；本轮只做 packaging smoke gate 前置收口。当前 `src-tauri/tauri.conf.json` 已配置 `bundle.active=true`、`bundle.targets=["dmg"]`、`beforeBuildCommand=pnpm --filter @ai-partner/frontend build` 和 `frontendDist=../frontend/dist`，因此暂不修改 `src-tauri`。新增根级 `pnpm smoke:dmg:preflight`、`pnpm tauri:build`、`pnpm package:dmg`，用于在正式 DMG build 前锁住配置和命令入口。T6/T8/T9 已完成的是最小 physical/renderer/wrapper 闭环；完整产品 UI、asset selector、partner search/switch、多 AI adapter 不属于 M5 前置收口。
+Status 2026-06-07：M5 packaged app/DMG internal smoke 已通过；本轮仍不扩展产品 UI、不做 asset selector、partner search/switch 或多 AI adapter。当前 `src-tauri/tauri.conf.json` 仍保持 `bundle.active=true`、`bundle.targets=["dmg"]`、`beforeBuildCommand=pnpm --filter @ai-partner/frontend build` 和 `frontendDist=../frontend/dist`，本轮未修改 `src-tauri`。`pnpm package:dmg` 先跑只读 preflight，再用 `pnpm tauri:build:app` 生成 release `.app`，最后由 `scripts/package-macos-dmg.mjs` 创建内部 smoke DMG；这是因为 Tauri 生成的 `bundle_dmg.sh` 在当前 macOS GUI/automation 环境卡在 Finder AppleScript 美化步骤。该修复只影响 packaging 脚本，不改变产品窗口、权限或 Rust 状态桥。
+
+M5 smoke record 2026-06-07：
+
+- 环境：分支 `codex/ai-partner-m0-contracts`，smoke 起点 HEAD `896b91e`；macOS 26.2 build 25C56，arm64；Node `v24.14.1`，pnpm `10.33.0`，rustc/cargo `1.96.0`，Tauri CLI `2.11.2`。
+- `pnpm smoke:dmg:preflight` 通过；`pnpm package:dmg` 提权后通过，产物为 `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/dmg/AI Partner_0.1.0_aarch64.dmg`，格式 `UDZO`，大小约 `2.9M`，CRC32 `$F2BDC7A2`。
+- DMG 挂载到 `/Volumes/AI Partner`，packaged app 安装到 `/private/tmp/ai-partner-m5-smoke.YHwFP1/AI Partner.app` 并从该路径启动，未使用 `pnpm tauri:dev`。
+- packaged app 进程来自临时安装路径，pid `17979`；WindowServer 确认 `AI Partner M0` on-screen，owner pid `17979`，默认伴侣窗口可见。
+- 不抢焦点通过：启动前后前台应用保持 `Finder`，AI Partner 未成为 frontmost app。
+- `${TMPDIR}/ai-partner/runtime-descriptor.json` 权限为 `0600`，目录为 `0700`；token 未写入仓库、文档或日志。
+- `pnpm debug:discover` 提权后发现 `http://127.0.0.1:52969/events`，`appInstanceId=app_20260606T145154Z_17979_3d65f8850b99dd41`。
+- `pnpm debug:send waiting` / `pnpm debug:send done` 原样通过；为支撑 checklist，debug CLI 现在会记录最近一次单发非终态 run id，后续未显式传 `--run-id` 的 `done/error` 复用该 run id，避免被 active-run 仲裁拒绝。
+- Click-through 物理复核通过：用户真实手点确认点击可落到底层 app，6 秒后 AI Partner 恢复可点击。自动化点击/截图路径仍不作为等价证据。
+- 签名/公证/Gatekeeper 风险：当前 app 为 ad-hoc/linker 签名；`codesign --verify --deep --strict --verbose=2` 失败，提示 `code has no resources but signature indicates they must be present`；`spctl --assess` 对 app/DMG 返回 Code Signing subsystem internal error；`xcrun stapler validate` 未通过。这些进入 release checklist，不在本轮扩 UI 或做签名公证收口。
+- 验证通过：`pnpm test`、`pnpm test:typecheck`、`pnpm smoke:dmg:preflight`。本轮未修改 Rust，未额外跑 `cargo test`。
 
 Tasks:
 
@@ -993,11 +1007,11 @@ Synthesized from this review's findings. Each task derives from a specific findi
   - Files: `scripts/`, `cli/` or `src-tauri/`
   - Verify: integration fixture drives 3+ workflow states, no code/diff/prompt sent
   - Status: 2026-06-06 minimal wrapper done in `packages/codex-wrapper/` with tests and local live verification. `pnpm codex:wrap --codex-bin /bin/zsh -- -lc '<safe JSONL transcript>'` drove `running/reading/editing/waiting/done` through descriptor + ingress without sending prompt/code/diff/file content. Real external Codex provider run was blocked by safety review and remains pending explicit user approval.
-- [ ] **T10 (P2, human: ~1 day / CC: ~30 min)** - Release - Produce macOS app/dmg internal build
+- [x] **T10 (P2, human: ~1 day / CC: ~30 min)** - Release - Produce macOS app/dmg internal build
   - Surfaced by: Distribution Check, Test Review
   - Files: `package.json`, `scripts/`, `docs/`, `src-tauri/` only if Tauri packaging requires it
   - Verify: `pnpm smoke:dmg:preflight`, Tauri build, install smoke, endpoint reachable, no focus stealing
-  - Status: 2026-06-06 M5 前置收口已补 root scripts、只读 packaging preflight 和 DMG smoke checklist；正式 DMG build/install smoke 仍未执行，T10 不标完成。
+  - Status: 2026-06-07 M5 packaged app/DMG internal smoke 通过；产物 `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/dmg/AI Partner_0.1.0_aarch64.dmg`，安装到临时路径并从 packaged app 启动，endpoint/debug/focus/descriptor/click-through 复核通过；签名/公证/Gatekeeper 风险列入 release checklist。
 - [ ] **T11 (P3, human: ~1h / CC: ~10 min)** - Product docs - Align BRD first-version messaging with MVP scope
   - Surfaced by: Outside Voice
   - Files: `docs/ai-desktop-partner-business-requirements.md`, `TODOS.md`

@@ -24,9 +24,14 @@ addCheck(
   "pnpm tauri:build uses the checked Tauri config",
 );
 addCheck(
+  "root Tauri app bundle script",
+  scripts["tauri:build:app"] === "pnpm exec tauri build --config src-tauri/tauri.conf.json --bundles app",
+  "pnpm tauri:build:app produces the packaged .app used by the internal DMG smoke artifact",
+);
+addCheck(
   "root DMG package script",
-  scripts["package:dmg"] === "pnpm run smoke:dmg:preflight && pnpm run tauri:build",
-  "pnpm package:dmg runs preflight before building",
+  scripts["package:dmg"] === "pnpm run smoke:dmg:preflight && pnpm run tauri:build:app && node scripts/package-macos-dmg.mjs",
+  "pnpm package:dmg runs preflight, builds the packaged app, then creates the internal DMG",
 );
 
 const build = tauriConfig.build ?? {};
@@ -67,6 +72,11 @@ addCheck(
   "packaged app keeps the audited M0 permissions set",
 );
 addCheck("frontend entry exists", existsSync(join(root, "frontend/index.html")), "frontend/index.html is present");
+addCheck(
+  "internal DMG builder exists",
+  existsSync(join(root, "scripts/package-macos-dmg.mjs")),
+  "scripts/package-macos-dmg.mjs creates the smoke DMG without Finder AppleScript",
+);
 
 const failed = checks.filter((check) => !check.pass);
 for (const check of checks) {

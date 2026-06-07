@@ -13,6 +13,8 @@ import {
   readRuntimeDescriptor,
   sendWorkflowEvent,
   createWorkflowEvent,
+  readDebugSessionRunId,
+  writeDebugSessionRunId,
   validateRuntimeDescriptorFreshness
 } from "../src";
 import { parseArgs } from "../src/cli";
@@ -25,6 +27,32 @@ describe("CLI args", () => {
     expect(args.positional).toEqual(["waiting"]);
     expect(args.flags.get("message")).toBe("a=b");
     expect(args.flags.get("descriptor")).toBe("/tmp/a=b.json");
+  });
+});
+
+describe("debug CLI session", () => {
+  it("stores and reads the latest single-send run id for smoke follow-ups", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ai-partner-debug-session-"));
+    const path = join(dir, "debug-session.json");
+    try {
+      await writeDebugSessionRunId("run_debug_session", path);
+
+      await expect(readDebugSessionRunId(path)).resolves.toBe("run_debug_session");
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("ignores missing or malformed debug session state", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ai-partner-debug-session-"));
+    const path = join(dir, "debug-session.json");
+    try {
+      await expect(readDebugSessionRunId(path)).resolves.toBeUndefined();
+      await writeFile(path, JSON.stringify({ runId: "bad" }));
+      await expect(readDebugSessionRunId(path)).resolves.toBeUndefined();
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
   });
 });
 

@@ -8,8 +8,10 @@ import {
   discoverRuntime,
   createRunId,
   createWorkflowEvent,
+  readDebugSessionRunId,
   isDebugWorkflowState,
-  sendWorkflowEvent
+  sendWorkflowEvent,
+  writeDebugSessionRunId
 } from "./index.js";
 import { asDebugCliError, DebugCliError } from "./errors.js";
 
@@ -72,12 +74,14 @@ async function runSend(args: ParsedArgs): Promise<void> {
   }
 
   const descriptor = await discoverRuntime(discoverOptions(args));
+  const explicitRunId = readOptionalFlag(args, "run-id");
   const event = createWorkflowEvent({
     state,
-    runId: readOptionalFlag(args, "run-id"),
+    runId: explicitRunId ?? await defaultRunIdForSend(state),
     message: readOptionalFlag(args, "message")
   });
   await sendWorkflowEvent(descriptor, event, sendOptions(args));
+  await rememberRunIdForSend(state, event.run_id, explicitRunId);
   console.log(`sent ${event.workflow_state} run_id=${event.run_id} event_id=${event.event_id}`);
 }
 
@@ -113,6 +117,24 @@ function sendOptions(args: ParsedArgs) {
   return {
     timeoutMs: readNumberFlag(args, "post-timeout-ms", undefined)
   };
+}
+
+async function defaultRunIdForSend(state: string): Promise<string | undefined> {
+  if (state === "done" || state === "error") {
+    return readDebugSessionRunId();
+  }
+  return undefined;
+}
+
+async function rememberRunIdForSend(
+  state: string,
+  runId: string,
+  explicitRunId: string | undefined
+): Promise<void> {
+  if (explicitRunId !== undefined || state === "done" || state === "error") {
+    return;
+  }
+  await writeDebugSessionRunId(runId);
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
