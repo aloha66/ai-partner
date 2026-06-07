@@ -1,7 +1,7 @@
 # AI 桌面伴侣工程实现计划
 
 日期：2026-06-02
-状态：已通过 `/plan-eng-review`，可从 M0 和 contracts 开始实施
+状态：M0/contracts/M1-M5 最小 MVP 技术预览闭环已完成；当前无 active TODO
 来源：
 
 - 已批准设计：`~/.gstack/projects/ai-partner/aloha66-master-design-20260530-213545.md`
@@ -960,14 +960,16 @@ Conflict flags:
 
 Synthesized from this review's findings. Each task derives from a specific finding above. Run with Codex or Claude Code; checkbox as you ship.
 
-- [ ] **T1 (P1, human: ~1 day / CC: ~30 min)** - Desktop shell - Run Tauri window spike with pass/fail gates
+- [x] **T1 (P1, human: ~1 day / CC: ~30 min)** - Desktop shell - Run Tauri window spike with pass/fail gates
   - Surfaced by: Architecture Review A1/A8
   - Files: `src-tauri/`, `frontend/`
   - Verify: manual macOS matrix for transparent, focus, drag, click-through, Spaces
-- [ ] **T2 (P1, human: ~4h / CC: ~25 min)** - Contracts - Create `packages/contracts/` with schemas, versions and fixtures
+  - Status: 2026-06-07 reconciled as complete from existing M0 work. `docs/m0-window-spike.md` records M0 acceptance as passing for transparent borderless window, always-on-top, no focus stealing, drag, click-through recovery, Spaces/fullscreen behavior and CSS sprite frame alignment; later M2/M5 records kept those checks valid for the packaged app path. No new `src-tauri` changes were needed for this status update.
+- [x] **T2 (P1, human: ~4h / CC: ~25 min)** - Contracts - Create `packages/contracts/` with schemas, versions and fixtures
   - Surfaced by: Code Quality Q2, Test Review
   - Files: `packages/contracts/`
   - Verify: schema fixture tests in TS and Rust
+  - Status: 2026-06-07 reconciled as complete from existing contracts work. `packages/contracts/` contains the four schema files, valid/invalid fixtures, TypeScript contract modules and casing boundary tests; `src-tauri/tests/contracts_fixtures.rs` consumes the same JSON schema fixtures from Rust. This matches the earlier M0 status line that contracts/schema/fixtures were established and tested.
 - [x] **T3 (P1, human: ~3h / CC: ~20 min)** - Runtime descriptor - Implement app endpoint bootstrap for wrapper/CLI
   - Surfaced by: Architecture Review A5
   - Files: `packages/contracts/`, `src-tauri/`, `scripts/` or `cli/`
@@ -1023,7 +1025,7 @@ Synthesized from this review's findings. Each task derives from a specific findi
 - Performance Review: 5 issues found, 5 user decisions
 - NOT in scope: written
 - What already exists: written
-- TODOS.md updates: 1 item proposed to user and accepted
+- TODOS.md updates: 1 item proposed to user and accepted; 2026-06-07 active list reconciled to none
 - Failure modes: 0 critical gaps after plan updates
 - Outside voice: ran via subagent; Codex CLI failed due local state DB permission in read-only sandbox
 - Parallelization: 4 lanes, 3 parallel after contracts / 1 sequential release lane
@@ -1042,4 +1044,4 @@ Synthesized from this review's findings. Each task derives from a specific findi
 - **CODEX:** Codex CLI outside voice failed in read-only sandbox because it could not write its local state DB; fallback subagent ran.
 - **CROSS-MODEL:** Outside voice agreed on descriptor, pause, active run, wrapper classifier, asset limits and release gates; added Tauri spike pass/fail and BRD TODO.
 - **UNRESOLVED:** 0
-- **VERDICT:** ENG CLEARED - ready to implement M0 window spike and `packages/contracts/`.
+- **VERDICT:** ENG CLEARED. Current status: M0 window spike and `packages/contracts/` are complete and reconciled in the task list.

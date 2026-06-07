@@ -1,5 +1,9 @@
 # TODOs
 
+## Active
+
+当前无 active TODO。
+
 ## Resolved
 
 ### TODO-1: 调整 AI 桌面伴侣 BRD 首版对外口径
