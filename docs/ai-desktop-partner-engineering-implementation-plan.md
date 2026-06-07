@@ -824,6 +824,8 @@ Acceptance:
 
 Status 2026-06-07：M5 packaged app/DMG internal smoke 已通过；本轮仍不扩展产品 UI、不做 asset selector、partner search/switch 或多 AI adapter。当前 `src-tauri/tauri.conf.json` 仍保持 `bundle.active=true`、`bundle.targets=["dmg"]`、`beforeBuildCommand=pnpm --filter @ai-partner/frontend build` 和 `frontendDist=../frontend/dist`，本轮未修改 `src-tauri`。`pnpm package:dmg` 先跑只读 preflight，再用 `pnpm tauri:build:app` 生成 release `.app`，最后由 `scripts/package-macos-dmg.mjs` 创建内部 smoke DMG；这是因为 Tauri 生成的 `bundle_dmg.sh` 在当前 macOS GUI/automation 环境卡在 Finder AppleScript 美化步骤。该修复只影响 packaging 脚本，不改变产品窗口、权限或 Rust 状态桥。
 
+Status 2026-06-07 distribution scope clarification：当前目标是 Petdex-like 本机内测/CLI 驱动安装，不做面向公众的 App Store 外 notarized direct-DMG 分发，因此 M5 不要求 Apple Developer ID 证书、notarization 或 stapled ticket。签名/公证/Gatekeeper 结果只作为风险记录；如果后续目标改为公开 direct-DMG 分发，再单独引入 Developer ID signing/notarization gate。
+
 M5 smoke record 2026-06-07：
 
 - 环境：分支 `codex/ai-partner-m0-contracts`，smoke 起点 HEAD `896b91e`；macOS 26.2 build 25C56，arm64；Node `v24.14.1`，pnpm `10.33.0`，rustc/cargo `1.96.0`，Tauri CLI `2.11.2`。
@@ -835,7 +837,7 @@ M5 smoke record 2026-06-07：
 - `pnpm debug:discover` 提权后发现 `http://127.0.0.1:52969/events`，`appInstanceId=app_20260606T145154Z_17979_3d65f8850b99dd41`。
 - `pnpm debug:send waiting` / `pnpm debug:send done` 原样通过；为支撑 checklist，debug CLI 现在会记录最近一次单发非终态 run id，后续未显式传 `--run-id` 的 `done/error` 复用该 run id，避免被 active-run 仲裁拒绝。
 - Click-through 物理复核通过：用户真实手点确认点击可落到底层 app，6 秒后 AI Partner 恢复可点击。自动化点击/截图路径仍不作为等价证据。
-- 签名/公证/Gatekeeper 风险：当前 app 为 ad-hoc/linker 签名；`codesign --verify --deep --strict --verbose=2` 失败，提示 `code has no resources but signature indicates they must be present`；`spctl --assess` 对 app/DMG 返回 Code Signing subsystem internal error；`xcrun stapler validate` 未通过。这些进入 release checklist，不在本轮扩 UI 或做签名公证收口。
+- 签名/公证/Gatekeeper 风险：当前 app 为 ad-hoc/linker 签名；`codesign --verify --deep --strict --verbose=2` 失败，提示 `code has no resources but signature indicates they must be present`；`spctl --assess` 对 app/DMG 返回 Code Signing subsystem internal error；`xcrun stapler validate` 未通过。这些不阻塞 Petdex-like 本机内测/CLI 安装路线；本轮不扩 UI、不做签名公证收口，也不引入 Apple Developer ID 依赖。
 - 验证通过：`pnpm test`、`pnpm test:typecheck`、`pnpm smoke:dmg:preflight`。本轮未修改 Rust，未额外跑 `cargo test`。
 
 Tasks:
@@ -857,7 +859,7 @@ DMG smoke checklist:
 6. 复核 `${TMPDIR}/ai-partner/runtime-descriptor.json` 权限为 `0600`，并确认 token 未写入仓库或日志。
 7. 运行 `pnpm debug:send waiting`，确认 packaged app UI 显示 waiting/source/message；再运行 `pnpm debug:send done`，确认状态可回到 idle。
 8. 点击进入 click-through，确认点击落到底层 app，等待 6 秒后自动恢复；快捷键未注册不单独判失败。
-9. 记录签名、公证、Gatekeeper 提示和 DMG 安装路径问题；这些风险进入 release checklist，不扩展本轮产品 UI。
+9. 记录签名、公证、Gatekeeper 提示和 DMG 安装路径问题；这些风险只用于判断未来是否要做公开 direct-DMG 分发，不阻塞当前 Petdex-like 内测路线。
 
 Acceptance:
 
@@ -865,7 +867,7 @@ Acceptance:
 - 首次启动默认伴侣可见。
 - Debug CLI 能到达本地 endpoint。
 - 不抢当前输入焦点。
-- 签名/公证风险列入 release checklist。
+- 不要求 Apple Developer ID、notarization 或 stapled ticket；签名/公证/Gatekeeper 仅作为未来公开 direct-DMG 分发的风险记录。
 
 ## Failure Modes
 

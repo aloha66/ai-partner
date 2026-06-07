@@ -133,7 +133,7 @@ pnpm tauri:dev
 - `pnpm debug:discover` 提权后通过，发现 `http://127.0.0.1:52969/events`，`appInstanceId=app_20260606T145154Z_17979_3d65f8850b99dd41`。
 - `pnpm debug:send waiting` / `pnpm debug:send done` 原样复核通过。smoke 中发现单发 `done` 默认新建 run id 会被 active-run 仲裁拒绝；已最小修复 debug CLI，让 `waiting` 等非终态单发记录最近 run id，后续 `done/error` 未显式传 `--run-id` 时复用该 run id。
 - Click-through packaged app 物理复核通过：用户真实手点确认点击可落到底层 app，等待 6 秒后 AI Partner 恢复可点击。macOS 自动化路径仍不能替代这条证据：`screencapture -l` 对透明无边框窗口失败，AX 无法稳定进入 WebView 控件，CGEvent/System Events 坐标点击未能被临时底层目标窗口接收。
-- 签名/公证/Gatekeeper 风险已记录：当前 app 为 ad-hoc/linker 签名，`codesign --verify --deep --strict --verbose=2` 返回 `code has no resources but signature indicates they must be present`；`spctl --assess` 对 app/DMG 返回 Code Signing subsystem internal error；`xcrun stapler validate` 未通过。该风险进入 release checklist，本轮不扩展产品 UI、不做签名公证收口。
+- 签名/公证/Gatekeeper 风险已记录：当前 app 为 ad-hoc/linker 签名，`codesign --verify --deep --strict --verbose=2` 返回 `code has no resources but signature indicates they must be present`；`spctl --assess` 对 app/DMG 返回 Code Signing subsystem internal error；`xcrun stapler validate` 未通过。当前目标是 Petdex-like 本机内测/CLI 安装，不做面向公众的 notarized direct-DMG 分发，因此不要求 Apple Developer ID，签名公证不阻塞 M5 acceptance。
 - 验证通过：`pnpm test`、`pnpm test:typecheck`、`pnpm smoke:dmg:preflight`。本轮未修改 Rust，也未额外跑 `cargo test`。
 
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
