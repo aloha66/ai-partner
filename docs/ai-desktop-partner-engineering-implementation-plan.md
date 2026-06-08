@@ -385,8 +385,9 @@ CODE PATHS                                             USER FLOWS
 [+] Runtime descriptor                                 [+] Codex run visible on desktop
   ├── [DONE] atomic write + 0600 permissions              ├── [DONE] [->E2E] running -> reading -> editing -> done
   ├── [DONE] stale pid/port rejected                      ├── [DONE] waiting requires user attention
-  ├── [GAP] token rotation                                ├── [DONE] error is visible and clearable
-  └── [DONE/T9] wrapper descriptor discovery              └── [DONE] pause prevents event spam on resume
+  ├── [DONE/M5.5-T2] token rotation on restart            ├── [DONE] error is visible and clearable
+  ├── [DONE/M5.5-T2] quit/restart rejects old endpoint    └── [DONE] pause prevents event spam on resume
+  └── [DONE/T9] wrapper descriptor discovery
 
 [+] Rust ingress + state store                         [+] Drag and physical interaction
   ├── [DONE] auth/localhost/CORS/origin                   ├── [DONE/front slice] carried -> struggling -> falling -> recovering
@@ -419,8 +420,8 @@ CODE PATHS                                             USER FLOWS
 [+] Asset loader + validator                           [+] macOS internal build
   ├── [DONE/front slice] pet.json required fields         ├── [DONE/M5] DMG install launches packaged app
   ├── [DONE/front slice] spritesheet exists               ├── [DONE/M5] debug CLI reaches packaged endpoint
-  ├── [DONE/front slice] 1536x1872 atlas                  └── [DONE/M5] runtime token omitted from docs/logs
-  ├── [DONE/front slice] 192x208 runtime frame
+  ├── [DONE/front slice] 1536x1872 atlas                  ├── [DONE/M5] runtime token omitted from docs/logs
+  ├── [DONE/front slice] 192x208 runtime frame            └── [DONE/M5.5-T2] packaged quit/restart lifecycle
   ├── [DONE/front slice] optional ai-partner.animations.json
   ├── [DONE/front slice] root sandbox/path traversal/symlink reject
   └── [DONE/front slice] extras max 32 frames, fps 1-24
@@ -434,7 +435,7 @@ CODE PATHS                                             USER FLOWS
 
 LLM integration: [NOT MVP] [->EVAL] only when opt-in LLM or memory ships
 
-COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription + M3 resolver/assets front slice + T5/T7 renderer integration closeout + T6 minimal physical/renderer integration closeout + T8 minimal CSS/DOM sprite renderer + T9 minimal Codex wrapper event bridge + M5 packaged app/DMG smoke are tested; full asset loader UI and partner search/switch remain planned gaps. External Codex provider live run requires explicit user approval before execution.
+COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription + M3 resolver/assets front slice + T5/T7 renderer integration closeout + T6 minimal physical/renderer integration closeout + T8 minimal CSS/DOM sprite renderer + T9 minimal Codex wrapper event bridge + M5 packaged app/DMG smoke + M5.5-T1 real Codex provider live run + M5.5-T2 packaged quit/restart lifecycle are tested; full asset loader UI and partner search/switch remain planned gaps.
 TARGET: 60/60 planned before MVP acceptance
 QUALITY TARGET: contracts/security/resolver/assets/wrapper need behavior + edge + error tests
 ```
@@ -461,7 +462,7 @@ Legend:
 11. Component tests cover bubble placement, source badge, selector open/search/switch, pause/resume and exit confirmation.
 12. E2E/manual script covers transparent window, focus behavior, drag, click-through recovery, full-screen/Spaces and high-DPI.
 13. Codex wrapper tests cover classifier fixtures, structured priority, stdout/stderr fallback, unknown fallback and no code/diff/prompt sent.
-14. DMG smoke test covers default partner visible, local endpoint reachable, no focus stealing.
+14. DMG smoke test covers default partner visible, local endpoint reachable, no focus stealing, packaged app quit/restart lifecycle, descriptor rotation, and stale endpoint/token rejection.
 
 ### Release Gates
 
@@ -469,7 +470,7 @@ Legend:
 | --- | --- | --- |
 | CI gate | contracts, Rust unit, TS unit, wrapper fixtures, asset validator | Any code merge |
 | Manual desktop gate | Tauri window spike, focus/Spaces/click-through/high-DPI matrix | M0 acceptance and release |
-| DMG smoke gate | install launch, default partner visible, endpoint reachable, no focus stealing | M5 acceptance |
+| DMG smoke gate | install launch, default partner visible, endpoint reachable, no focus stealing, quit/restart lifecycle | M5 acceptance |
 | Privacy gate | forbidden fields, no code/diff/prompt logs, descriptor permissions | M1/M4/M5 |
 
 ## Performance Review
@@ -801,6 +802,28 @@ Acceptance:
 
 Status 2026-06-06：已完成 T9 最小 Codex wrapper event bridge。`packages/codex-wrapper/` 提供 `pnpm codex:wrap`，读取 `${TMPDIR}/ai-partner/runtime-descriptor.json`，通过 `sendWorkflowEvent` 向本机 ingress 发送 `source=codex-wrapper` 的安全 `WorkflowEvent`。Wrapper 启动发 `running`，结构化信号优先识别 `reading/editing/waiting`，stdout/stderr 使用保守 fallback，unknown 降级 `running`，0 exit 发 `done`，非 0/signal 发 `error`。发送到 ingress 的 event body 只包含 `schemaVersion/event_id/source/run_id/workflow_state/timestamp/message/code_context_allowed`，固定 `code_context_allowed=false`，不发送 prompt、code、diff 或 file content。2026-06-06 live verification 中，真实外部 Codex provider run 因安全审核拒绝执行，未绕过；随后使用本地等价 Codex bin transcript 完成 wrapper -> descriptor -> `POST /events` -> Tauri app 闭环，覆盖 `running/reading/editing/waiting/done` 至少 3 类状态。提权截图 `/private/tmp/ai-partner-t9-wrapper-waiting-live.png` 显示 UI 处于 `WAITING / Codex is waiting`，`source=codex`，前台应用仍为 `Codex`。
 
+M5.5-T1 live provider gate record 2026-06-07：
+
+- 起点：分支 `main`，HEAD `2785092 docs(plan): reconcile mvp task status`；工作区仅有未跟踪 `.agents/`，未纳入 git。
+- 使用 packaged app，不使用 `pnpm tauri:dev`：从 `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/macos/AI Partner.app` 启动，进程 pid `30436`，runtime descriptor 写出到 `${TMPDIR}/ai-partner/runtime-descriptor.json`。WindowServer 元信息确认 `AI Partner M0` on-screen，owner `AI Partner`，pid `30436`，bounds `1020,269 520x360`。
+- Runtime descriptor discovery 通过：`pnpm debug:discover` 提权后发现 `http://127.0.0.1:56656/events`，`appInstanceId=app_20260607T154531Z_30436_4e6fccfe68f3c68f`；descriptor 目录权限 `0700`、文件权限 `0600`，记录只保留 `schemaVersion/appInstanceId/pid/port/createdAt/tokenLength`，不记录 token。
+- 本机 endpoint 复核：`lsof` 显示 `ai-partner` 只监听 `127.0.0.1:56656`；GET `/events` 返回 `405 Method Not Allowed`，安全 POST probe 返回 `202`。
+- 真实 Codex provider run 已通过：为避免项目内容风险，新建空目录 `/private/tmp/ai-partner-codex-live.aFYTMz`，通过 `pnpm codex:wrap --codex-bin /bin/zsh -- -lc 'cd "$1" && shift && exec codex "$@"' ... --ask-for-approval never exec --json --cd /private/tmp/ai-partner-codex-live.aFYTMz --skip-git-repo-check --sandbox read-only --ephemeral --ignore-rules 'Use only this empty temp directory. Run pwd and ls -la, then answer SAFE_SMOKE_OK.'` 包住真实 `codex exec --json`。
+- Codex JSONL 输出确认实际工作目录为 `/private/tmp/ai-partner-codex-live.aFYTMz`，`ls -la` 只显示空临时目录自身和 `..`，最终 agent message 为 `SAFE_SMOKE_OK`；未读取仓库、未要求写文件、未绕过 sandbox。
+- Wrapper 分类信号覆盖至少 4 类 workflow 状态：启动补发 `running`；真实 Codex JSONL 的 `item.started` / `item.completed command_execution` 命中结构化 `running` / `reading`；Codex 配置 deprecation/error item 命中结构化 `error`；0 exit 补发 `done`。由于本次安全 prompt 不触发审批，也不制造写操作，未强行追求 `waiting/editing`。
+- Ingress payload 隐私边界复核：wrapper 事件仍由 `createCodexWorkflowEvent` / `workflowEventPayloadForPost` 生成，只含 `schemaVersion/event_id/source/run_id/workflow_state/timestamp/message/code_context_allowed`，固定 `code_context_allowed=false`；不发送 prompt、code、diff、file_content。真实 Codex stdout/stderr 原样转发到终端不等于发送到 ingress。
+- 不抢焦点复核通过：packaged app 启动前、启动后、真实 Codex run 后，`osascript` 读取 frontmost 均为 `Codex`；`System Events` 读取 `ai-partner` 为 `frontmost=false`。
+- 自动化视觉取证限制：全屏 `screencapture` 被安全审核拒绝，因为会捕获无关桌面内容；当前 macOS SDK 的旧单窗截图 API 已不可用，`System Events` 对 Tauri/WebView 只暴露 `AXApplication`/menu bar，不能稳定读取窗口文本。M5.5-T1 因此以 wrapper classification + ingress accepted + WindowServer/descriptor/focus 元数据作为 gate 证据，不新增产品 UI 或调试导出。
+
+M5.5-T2 packaged lifecycle gate record 2026-06-08：
+
+- 使用 packaged app，不使用 `pnpm tauri:dev`：从 `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/macos/AI Partner.app` 以 `open -g -n` 后台启动，避免验证命令自身激活 app。启动、退出、重启全程 `osascript` 显示前台应用保持 `Google Chrome`，`System Events` 显示 AI Partner `frontmost=false`。
+- 首次实例 descriptor discovery 通过：`appInstanceId=app_20260608T000132Z_13848_03e2c451be5b6903`，pid `13848`，port `62502`，`createdAt=2026-06-08T00:01:32.542385+00:00`；descriptor 目录权限 `0700`、文件权限 `0600`，只记录 `tokenLength=64` / `tokenPresent=true`，不记录 token。
+- 退出首次实例后，descriptor 文件在本机没有立即删除，但旧 descriptor 不再被 discovery 接受：旧 descriptor copy 下 `debug:discover` 返回 `descriptor_stale: Runtime descriptor process is not alive.`；旧 endpoint + 旧 token POST 返回 `ECONNREFUSED`。因此满足“删除或旧 descriptor 不再被 discovery 接受”的 lifecycle gate。
+- 重启后生成新实例：`appInstanceId=app_20260608T000135Z_14126_cbc656b646544c97`，pid `14126`，port `62558`，`createdAt=2026-06-08T00:01:35.425752+00:00`；新 descriptor 权限仍为目录 `0700`、文件 `0600`，token 只在内存中比较，结论为 `tokenChanged=true`。
+- `pnpm debug:discover` 发现新 endpoint `http://127.0.0.1:62558/events`；`pnpm debug:send waiting` 对新实例发送成功。旧 token 打到新 endpoint 返回 HTTP `401`，旧 descriptor copy 下 `debug:discover`、`debug:send waiting` 和 `pnpm codex:wrap --descriptor <old-descriptor-copy> --codex-bin /bin/echo -- SAFE` 均返回 `descriptor_stale`；默认 descriptor 下 wrapper 成功，确认 wrapper/debug CLI 不误连旧实例。
+- 本轮未修改产品功能，未修改 `src-tauri`/Rust，未跑 `cargo test`。临时验证脚本和旧 descriptor copy 只在 `/private/tmp` 使用并已清理；`.agents/` 仍不纳入 git。Next：把此 gate 保留为 release 前 DMG smoke regression，下一步优先收敛剩余非 lifecycle 的 MVP gap。
+
 Tasks:
 
 - Wrapper 读取 `RuntimeDescriptor`。（已做）
@@ -814,7 +837,7 @@ Tasks:
 
 Acceptance:
 
-- 一次本地等价 Codex bin run 能驱动桌面伴侣至少 3 类 workflow 变化；真实外部 Codex provider run 待用户显式批准后补跑。
+- 一次真实外部 Codex provider run 能驱动桌面伴侣至少 3 类 workflow 变化。（M5.5-T1 已通过；T9 本地等价 Codex bin run 仍作为 fallback 回归样例）
 - Wrapper 不发送代码内容、diff、prompt。（已由 tests 和 live event bridge 边界复核）
 - Fixture corpus 覆盖分类和隐私边界。（已覆盖）
 
@@ -854,12 +877,15 @@ DMG smoke checklist:
 1. 运行 `pnpm smoke:dmg:preflight`，确认 Tauri build、DMG target、默认窗口和不抢焦点配置未漂移。
 2. 运行 `pnpm package:dmg` 生成 macOS DMG；若只需定位 build 问题，可单独运行 `pnpm tauri:build`。
 3. 挂载 DMG，把 packaged app 安装到临时位置或 Applications，并从 packaged app 启动，不用 `pnpm tauri:dev`。
-4. 保持终端或编辑器为前台输入应用，确认 AI Partner 首次启动后默认伴侣可见，且前台应用没有切到 AI Partner。
+4. 保持终端或编辑器为前台输入应用，确认 AI Partner 首次启动后默认伴侣可见，且前台应用没有切到 AI Partner；需要后台启动验证时使用 `open -g -n <AI Partner.app>`。
 5. 运行 `pnpm debug:discover`，确认 packaged app 写出的 runtime descriptor 可发现，endpoint 指向 `127.0.0.1`。
 6. 复核 `${TMPDIR}/ai-partner/runtime-descriptor.json` 权限为 `0600`，并确认 token 未写入仓库或日志。
 7. 运行 `pnpm debug:send waiting`，确认 packaged app UI 显示 waiting/source/message；再运行 `pnpm debug:send done`，确认状态可回到 idle。
 8. 点击进入 click-through，确认点击落到底层 app，等待 6 秒后自动恢复；快捷键未注册不单独判失败。
-9. 记录签名、公证、Gatekeeper 提示和 DMG 安装路径问题；这些风险只用于判断未来是否要做公开 direct-DMG 分发，不阻塞当前 Petdex-like 内测路线。
+9. 退出 packaged app，确认 descriptor 被删除，或旧 descriptor 在 `debug:discover --descriptor <old-copy>` 下被拒绝。
+10. 重启 packaged app，确认 `appInstanceId`、pid、port 和 token 都变化；文档只记录 token 是否变化和长度，不记录 token 值。
+11. 确认旧 endpoint/token 不可继续使用，旧 token 打新 endpoint 应返回 `401`；旧 descriptor copy 下 debug CLI 和 wrapper 都不能把事件送进新实例。
+12. 记录签名、公证、Gatekeeper 提示和 DMG 安装路径问题；这些风险只用于判断未来是否要做公开 direct-DMG 分发，不阻塞当前 Petdex-like 内测路线。
 
 Acceptance:
 
@@ -867,6 +893,7 @@ Acceptance:
 - 首次启动默认伴侣可见。
 - Debug CLI 能到达本地 endpoint。
 - 不抢当前输入焦点。
+- 退出/重启会轮换 descriptor endpoint/token，旧 descriptor、旧 endpoint 和旧 token 不会被 debug CLI 或 wrapper 继续使用。
 - 不要求 Apple Developer ID、notarization 或 stapled ticket；签名/公证/Gatekeeper 仅作为未来公开 direct-DMG 分发的风险记录。
 
 ## Failure Modes

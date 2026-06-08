@@ -136,6 +136,29 @@ pnpm tauri:dev
 - 签名/公证/Gatekeeper 风险已记录：当前 app 为 ad-hoc/linker 签名，`codesign --verify --deep --strict --verbose=2` 返回 `code has no resources but signature indicates they must be present`；`spctl --assess` 对 app/DMG 返回 Code Signing subsystem internal error；`xcrun stapler validate` 未通过。当前目标是 Petdex-like 本机内测/CLI 安装，不做面向公众的 notarized direct-DMG 分发，因此不要求 Apple Developer ID，签名公证不阻塞 M5 acceptance。
 - 验证通过：`pnpm test`、`pnpm test:typecheck`、`pnpm smoke:dmg:preflight`。本轮未修改 Rust，也未额外跑 `cargo test`。
 
+2026-06-07 M5.5-T1 real Codex provider live run gate：
+
+- 起点：分支 `main`，HEAD `2785092 docs(plan): reconcile mvp task status`；工作区仅有未跟踪 `.agents/`，未纳入 git。
+- 使用 packaged app：从 `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/macos/AI Partner.app` 启动，进程 pid `30436`；WindowServer 元信息确认 `AI Partner M0` on-screen，owner `AI Partner`，pid `30436`，bounds `1020,269 520x360`；`osascript` 复核启动前后 frontmost 均为 `Codex`，AI Partner 未抢焦点。
+- Runtime descriptor discovery 已跑：`${TMPDIR}/ai-partner/runtime-descriptor.json` 写出，目录权限 `0700`、文件权限 `0600`；`pnpm debug:discover` 提权后发现 `http://127.0.0.1:56656/events`，`appInstanceId=app_20260607T154531Z_30436_4e6fccfe68f3c68f`，未打印 token。
+- 本机 ingress 复核：`lsof` 显示 `ai-partner` 监听 `127.0.0.1:56656`；GET `/events` 返回 `405`，安全 POST probe 返回 `202`。
+- 真实 Codex provider run 已通过：新建空临时目录 `/private/tmp/ai-partner-codex-live.aFYTMz`，用 `pnpm codex:wrap` 包住真实 `codex exec --json`，并通过 `/bin/zsh -lc 'cd "$1" && shift && exec codex "$@"'` 确保子进程先进入空目录；Codex 同时带 `--cd` 指向该目录、`--sandbox read-only`、`--ask-for-approval never`、`--ephemeral`、`--ignore-rules`、`--skip-git-repo-check`。
+- Prompt 为无项目内容的短安全 prompt：只要求在当前空目录运行 `pwd` / `ls -la` 并回答 `SAFE_SMOKE_OK`。Codex JSONL 输出确认 `pwd` 为 `/private/tmp/ai-partner-codex-live.aFYTMz`，`ls -la` 只包含空目录自身和 `..`，最终 agent message 为 `SAFE_SMOKE_OK`。
+- Wrapper 状态覆盖满足 gate：启动补发 `running`；真实 JSONL 的 command execution 结构化事件命中 `running` / `reading`；Codex 配置 deprecation/error item 命中 `error`；0 exit 补发 `done`。本次至少覆盖 4 类 workflow 状态；未强造 `waiting/editing`。
+- 隐私边界复核：发送到 ingress 的 wrapper payload 仍只含 `schemaVersion/event_id/source/run_id/workflow_state/timestamp/message/code_context_allowed`，固定 `code_context_allowed=false`，不包含 prompt、code、diff、file_content。真实 Codex stdout/stderr 只转发到终端，不进入 ingress payload。
+- 真实 run 后 `osascript` 复核 frontmost 仍为 `Codex`，`ai-partner` 为 `frontmost=false`。全屏截图因会捕获无关桌面内容被安全审核拒绝；当前 macOS SDK 的旧单窗截图 API 已不可用，Tauri/WebView 在当前 AX 路径中不暴露窗口文本，因此本 gate 使用 wrapper classification、ingress accepted、WindowServer/descriptor/focus 元数据作为证据。
+
+2026-06-08 M5.5-T2 packaged app quit/restart lifecycle gate：
+
+- 使用 packaged app，不使用 `pnpm tauri:dev`：从 `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/macos/AI Partner.app` 以后台方式 `open -g -n` 启动，避免验证命令自身激活 app；启动、退出、重启全程前台应用保持 `Google Chrome`，`System Events` 显示 AI Partner `frontmost=false`。
+- 首次 packaged app 实例 descriptor discovery 通过：`appInstanceId=app_20260608T000132Z_13848_03e2c451be5b6903`，pid `13848`，port `62502`，`createdAt=2026-06-08T00:01:32.542385+00:00`；descriptor 目录权限 `0700`、文件权限 `0600`，只记录 `tokenLength=64` 和 `tokenPresent=true`，未记录 token。
+- `pnpm debug:discover` 发现 `http://127.0.0.1:62502/events`；`pnpm debug:send waiting` 对首次实例发送成功。
+- 退出首次 packaged app 后，descriptor 文件在本机没有立即删除，但旧 descriptor 已不可被 discovery 接受：旧 descriptor copy 运行 `debug:discover` 返回 `descriptor_stale: Runtime descriptor process is not alive.`；旧 endpoint + 旧 token POST 返回 `ECONNREFUSED`。这满足 gate 的“descriptor 被删除或旧 descriptor 不再被 discovery 接受”条件。
+- 重启 packaged app 后生成新实例：`appInstanceId=app_20260608T000135Z_14126_cbc656b646544c97`，pid `14126`，port `62558`，`createdAt=2026-06-08T00:01:35.425752+00:00`；descriptor 目录权限仍为 `0700`、文件权限仍为 `0600`，`tokenLength=64`，token 只在内存中比较，结果为 `tokenChanged=true`。
+- 重启后 `pnpm debug:discover` 发现新 endpoint `http://127.0.0.1:62558/events`；`pnpm debug:send waiting` 对新实例发送成功。旧 token 打到新 endpoint 返回 HTTP `401`，确认旧 token 不可继续使用。
+- Wrapper/debug CLI 不误连旧实例：旧 descriptor copy 下 `debug:discover`、`debug:send waiting` 和 `pnpm codex:wrap --descriptor <old-descriptor-copy> --codex-bin /bin/echo -- SAFE` 均返回 `descriptor_stale: Runtime descriptor process is not alive.`；默认 descriptor 下 `pnpm codex:wrap --codex-bin /bin/echo -- SAFE` 成功并发现新实例。
+- 本轮未发现需要产品代码修复的 lifecycle 缺口。未修改 `src-tauri`/Rust，未跑 `cargo test`；验证脚本和旧 descriptor copy 均位于 `/private/tmp` 且已清理，不纳入仓库。Next：把此 gate 保留为 release 前 DMG smoke regression，下一步优先收敛剩余非 lifecycle 的 MVP gap。
+
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
 
 ## M1 Rust State Bridge 进展
