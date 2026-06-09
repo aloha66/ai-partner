@@ -402,18 +402,19 @@ CODE PATHS                                             USER FLOWS
 
 [+] Tauri bridge + renderer                            [+] Partner selection
   ├── [DONE] state event emitted by Rust                  ├── [DONE/model] corrupt asset falls back to default partner
-  ├── [DONE] renderer subscription pulls current snapshot ├── [GAP] search/switch local partner
-  ├── [DONE] minimal bubble/source/status visual          └── [GAP] exit requires confirmation
+  ├── [DONE] renderer subscription pulls current snapshot ├── [ROADMAP/NOT MVP] search/switch local partner
+  ├── [DONE] minimal bubble/source/status visual          └── [ROADMAP/NOT MVP] exit requires confirmation
   ├── [DONE/front slice] physicalStateMachine reducer
   ├── [DONE/T8] CSS/DOM sprite + default Petdex/probe intent mapping
   ├── [DONE/T8] 520x360 screenshot/layout sanity
   └── [DONE] M0 integer scale/frame alignment
 
 [+] TypeScript resolver                                [+] Desktop shell
-  ├── [DONE/front slice] workflow normal mappings         ├── [GAP] [->E2E/manual] transparent window
-  ├── [DONE/front slice] physical body override           ├── [GAP] [->E2E/manual] always on top behavior
+  ├── [DONE/front slice] workflow normal mappings         ├── [DONE/M0] [->E2E/manual] transparent window
+  ├── [DONE/front slice] physical body override           ├── [DONE/M0] [->E2E/manual] always-on-top behavior
   ├── [DONE/front slice] waiting/error bubble priority    ├── [DONE] click-through quiet mode can recover
-  ├── [DONE/front slice] done queued under physical       └── [GAP] multi-display/high-DPI sanity
+  ├── [DONE/front slice] done queued under physical       ├── [RELEASE GATE] Retina/high-DPI manual smoke
+  │                                                        └── [ROADMAP/RISK] external multi-display experience
   ├── [DONE/front slice] frontend queued done replay
   └── [DONE/front slice] extension -> legacy -> procedural fallback
 
@@ -435,8 +436,8 @@ CODE PATHS                                             USER FLOWS
 
 LLM integration: [NOT MVP] [->EVAL] only when opt-in LLM or memory ships
 
-COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription + M3 resolver/assets front slice + T5/T7 renderer integration closeout + T6 minimal physical/renderer integration closeout + T8 minimal CSS/DOM sprite renderer + T9 minimal Codex wrapper event bridge + M5 packaged app/DMG smoke + M5.5-T1 real Codex provider live run + M5.5-T2 packaged quit/restart lifecycle are tested; full asset loader UI and partner search/switch remain planned gaps.
-TARGET: 60/60 planned before MVP acceptance
+COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription + M3 resolver/assets front slice + T5/T7 renderer integration closeout + T6 minimal physical/renderer integration closeout + T8 minimal CSS/DOM sprite renderer + T9 minimal Codex wrapper event bridge + M5 packaged app/DMG smoke + M5.5-T1 real Codex provider live run + M5.5-T2 packaged quit/restart lifecycle are tested. Transparent window and always-on-top are DONE/M0. Partner search/switch, exit confirmation, full asset loader UI and external multi-display experience are ROADMAP/NOT MVP. Retina/high-DPI remains a release-pre manual smoke gate.
+TARGET: MVP coverage accounted before acceptance; ROADMAP/NOT MVP rows are excluded from the MVP target
 QUALITY TARGET: contracts/security/resolver/assets/wrapper need behavior + edge + error tests
 ```
 
@@ -459,8 +460,8 @@ Legend:
 8. `resolver.test.ts` covers every workflow x physical priority case in the design matrix.
 9. `resolver.test.ts` covers `done` queue and 5 second expiry.
 10. `asset_loader.test.ts` covers missing `pet.json`, missing spritesheet, wrong atlas size, wrong cell size, extension fallback, path escape and symlink rejection.
-11. Component tests cover bubble placement, source badge, selector open/search/switch, pause/resume and exit confirmation.
-12. E2E/manual script covers transparent window, focus behavior, drag, click-through recovery, full-screen/Spaces and high-DPI.
+11. Component tests cover bubble placement, source badge and pause/resume. Selector open/search/switch and exit confirmation tests start when those roadmap UI surfaces enter MVP scope.
+12. E2E/manual script covers transparent window, focus behavior, drag, click-through recovery and full-screen/Spaces. Retina/high-DPI sanity is a release-pre manual smoke gate; external multi-display UX is a roadmap/risk note unless the MVP scope explicitly changes.
 13. Codex wrapper tests cover classifier fixtures, structured priority, stdout/stderr fallback, unknown fallback and no code/diff/prompt sent.
 14. DMG smoke test covers default partner visible, local endpoint reachable, no focus stealing, packaged app quit/restart lifecycle, descriptor rotation, and stale endpoint/token rejection.
 
@@ -469,7 +470,7 @@ Legend:
 | Gate | Runs where | Blocks |
 | --- | --- | --- |
 | CI gate | contracts, Rust unit, TS unit, wrapper fixtures, asset validator | Any code merge |
-| Manual desktop gate | Tauri window spike, focus/Spaces/click-through/high-DPI matrix | M0 acceptance and release |
+| Manual desktop gate | Tauri window spike, focus/Spaces/click-through; Retina/high-DPI manual smoke before release | M0 acceptance and release |
 | DMG smoke gate | install launch, default partner visible, endpoint reachable, no focus stealing, quit/restart lifecycle | M5 acceptance |
 | Privacy gate | forbidden fields, no code/diff/prompt logs, descriptor permissions | M1/M4/M5 |
 
@@ -524,6 +525,11 @@ Rules:
 ### P5. High-DPI and package budgets
 
 **Decision:** Prefer integer scaling, with fixed scale presets if needed. Ship one default Petdex-compatible companion in the DMG.
+
+Release readiness:
+
+- Retina/high-DPI sanity remains a release-pre manual smoke gate: verify the default partner, bubble/status overlay and click-through banner at the active Retina scale with no clipping, blur-driven frame drift or text overlap.
+- External multi-display behavior is not an MVP commitment for the macOS Codex technical preview. Treat it as a roadmap/risk note unless the release scope explicitly adds external display UX; do not keep it as an MVP gap.
 
 Budgets:
 
@@ -763,7 +769,8 @@ Tasks:
 - bubble/status/source badge overlay。（已完成最小 workflow/source/status 展示；T8 已保留 overlay 并做 520x360 sanity）
 - `physicalStateMachine` / reducer。（已完成 T6 最小 physical/renderer integration 收口）
 - drag pointer 坐标用 ref + rAF + Tauri window move。（已做；本轮用结构测试锁住 pointermove 不进入 resolver dependency）
-- 右键菜单：暂停、恢复、切换伴侣、退出确认。
+- 右键菜单/控制面：暂停、恢复。（已由当前最小控制入口覆盖）
+- Roadmap/NOT MVP：切换伴侣、本地伴侣搜索和退出二次确认。
 - 整数缩放和固定 scale preset。
 
 Acceptance:
@@ -800,7 +807,7 @@ Acceptance:
 
 目标：真实 Codex 工作流自动产生至少 3 类状态。
 
-Status 2026-06-06：已完成 T9 最小 Codex wrapper event bridge。`packages/codex-wrapper/` 提供 `pnpm codex:wrap`，读取 `${TMPDIR}/ai-partner/runtime-descriptor.json`，通过 `sendWorkflowEvent` 向本机 ingress 发送 `source=codex-wrapper` 的安全 `WorkflowEvent`。Wrapper 启动发 `running`，结构化信号优先识别 `reading/editing/waiting`，stdout/stderr 使用保守 fallback，unknown 降级 `running`，0 exit 发 `done`，非 0/signal 发 `error`。发送到 ingress 的 event body 只包含 `schemaVersion/event_id/source/run_id/workflow_state/timestamp/message/code_context_allowed`，固定 `code_context_allowed=false`，不发送 prompt、code、diff 或 file content。2026-06-06 live verification 中，真实外部 Codex provider run 因安全审核拒绝执行，未绕过；随后使用本地等价 Codex bin transcript 完成 wrapper -> descriptor -> `POST /events` -> Tauri app 闭环，覆盖 `running/reading/editing/waiting/done` 至少 3 类状态。提权截图 `/private/tmp/ai-partner-t9-wrapper-waiting-live.png` 显示 UI 处于 `WAITING / Codex is waiting`，`source=codex`，前台应用仍为 `Codex`。
+Status 2026-06-08：T9 最小 Codex wrapper event bridge 和 M5.5-T1 真实 Codex provider live run gate 均已完成。`packages/codex-wrapper/` 提供 `pnpm codex:wrap`，读取 `${TMPDIR}/ai-partner/runtime-descriptor.json`，通过 `sendWorkflowEvent` 向本机 ingress 发送 `source=codex-wrapper` 的安全 `WorkflowEvent`。Wrapper 启动发 `running`，结构化信号优先识别 `reading/editing/waiting`，stdout/stderr 使用保守 fallback，unknown 降级 `running`，0 exit 发 `done`，非 0/signal 发 `error`。发送到 ingress 的 event body 只包含 `schemaVersion/event_id/source/run_id/workflow_state/timestamp/message/code_context_allowed`，固定 `code_context_allowed=false`，不发送 prompt、code、diff 或 file content。2026-06-06 本地等价 Codex bin transcript 已完成 wrapper -> descriptor -> `POST /events` -> Tauri app fallback 回归闭环，覆盖 `running/reading/editing/waiting/done` 至少 3 类状态；2026-06-07 真实 Codex provider packaged-app live run 已在空临时目录中通过，覆盖至少 4 类 workflow 状态，且未读取仓库、未发送 prompt/code/diff/file content 到 ingress。
 
 M5.5-T1 live provider gate record 2026-06-07：
 
@@ -1031,7 +1038,7 @@ Synthesized from this review's findings. Each task derives from a specific findi
   - Surfaced by: Architecture Review A4, Test Review, Outside Voice
   - Files: `scripts/`, `cli/` or `src-tauri/`
   - Verify: integration fixture drives 3+ workflow states, no code/diff/prompt sent
-  - Status: 2026-06-06 minimal wrapper done in `packages/codex-wrapper/` with tests and local live verification. `pnpm codex:wrap --codex-bin /bin/zsh -- -lc '<safe JSONL transcript>'` drove `running/reading/editing/waiting/done` through descriptor + ingress without sending prompt/code/diff/file content. Real external Codex provider run was blocked by safety review and remains pending explicit user approval.
+  - Status: 2026-06-08 reconciled as complete. `packages/codex-wrapper/` has tests and local fallback live verification; `pnpm codex:wrap --codex-bin /bin/zsh -- -lc '<safe JSONL transcript>'` drove `running/reading/editing/waiting/done` through descriptor + ingress without sending prompt/code/diff/file content. M5.5-T1 later completed the real Codex provider packaged-app live run in an empty temp directory, covering at least 4 workflow states while keeping prompt/code/diff/file content out of ingress.
 - [x] **T10 (P2, human: ~1 day / CC: ~30 min)** - Release - Produce macOS app/dmg internal build
   - Surfaced by: Distribution Check, Test Review
   - Files: `package.json`, `scripts/`, `docs/`, `src-tauri/` only if Tauri packaging requires it

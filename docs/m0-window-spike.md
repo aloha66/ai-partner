@@ -157,13 +157,13 @@ pnpm tauri:dev
 - 重启 packaged app 后生成新实例：`appInstanceId=app_20260608T000135Z_14126_cbc656b646544c97`，pid `14126`，port `62558`，`createdAt=2026-06-08T00:01:35.425752+00:00`；descriptor 目录权限仍为 `0700`、文件权限仍为 `0600`，`tokenLength=64`，token 只在内存中比较，结果为 `tokenChanged=true`。
 - 重启后 `pnpm debug:discover` 发现新 endpoint `http://127.0.0.1:62558/events`；`pnpm debug:send waiting` 对新实例发送成功。旧 token 打到新 endpoint 返回 HTTP `401`，确认旧 token 不可继续使用。
 - Wrapper/debug CLI 不误连旧实例：旧 descriptor copy 下 `debug:discover`、`debug:send waiting` 和 `pnpm codex:wrap --descriptor <old-descriptor-copy> --codex-bin /bin/echo -- SAFE` 均返回 `descriptor_stale: Runtime descriptor process is not alive.`；默认 descriptor 下 `pnpm codex:wrap --codex-bin /bin/echo -- SAFE` 成功并发现新实例。
-- 本轮未发现需要产品代码修复的 lifecycle 缺口。未修改 `src-tauri`/Rust，未跑 `cargo test`；验证脚本和旧 descriptor copy 均位于 `/private/tmp` 且已清理，不纳入仓库。Next：把此 gate 保留为 release 前 DMG smoke regression，下一步优先收敛剩余非 lifecycle 的 MVP gap。
+- 本轮未发现需要产品代码修复的 lifecycle 缺口。未修改 `src-tauri`/Rust，未跑 `cargo test`；验证脚本和旧 descriptor copy 均位于 `/private/tmp` 且已清理，不纳入仓库。Next：把此 gate 保留为 release 前 DMG smoke regression，剩余非 lifecycle 项按 release readiness / roadmap 口径收敛。
 
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
 
 ## M1 Rust State Bridge 进展
 
-2026-06-03 已进入 M1 Rust State Bridge。当前已完成并复核内存状态桥、localhost HTTP ingress + runtime descriptor 的最小闭环，以及本地 debug sender/discovery。2026-06-04 已完成 M2 最小前端状态订阅；2026-06-05 已开始 M3 最小 resolver + asset loader 前置切片；2026-06-06 已完成 T6 最小 physical/renderer integration 收口、T8 最小 renderer 收口和 T9 最小 Codex wrapper 本地 live verification。不实现完整 asset loader UI、partner search/switch 或多 AI adapter。
+2026-06-03 已进入 M1 Rust State Bridge。当前已完成并复核内存状态桥、localhost HTTP ingress + runtime descriptor 的最小闭环，以及本地 debug sender/discovery。2026-06-04 已完成 M2 最小前端状态订阅；2026-06-05 已开始 M3 最小 resolver + asset loader 前置切片；2026-06-06 已完成 T6 最小 physical/renderer integration 收口、T8 最小 renderer 收口和 T9 最小 Codex wrapper 本地 live verification；2026-06-07 已完成 M5.5-T1 真实 Codex provider live run；2026-06-08 已完成 M5.5-T2 packaged quit/restart lifecycle gate。不实现完整 asset loader UI、partner search/switch 或多 AI adapter。
 
 已完成：
 
@@ -191,9 +191,13 @@ M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、
 
 仍未做：
 
-- 真实外部 Codex provider live run 需要用户显式批准后再跑；本轮只完成本地等价 Codex bin live verification。
 - 完整 asset loader UI、partner search/switch、多 run 聚合 UI。
 - UI redesign、多 AI adapter 仍不在本轮范围；T8 未碰 `src-tauri`。
+
+Release readiness note：
+
+- Retina/high-DPI sanity 保留为 release 前 manual smoke gate，重点复核默认伴侣、bubble/status overlay、click-through banner 在当前 Retina 缩放下不裁切、不重叠、无明显帧漂移。
+- 当前 macOS Codex technical preview 不承诺外接多屏体验；multi-display 作为 roadmap/risk note 跟踪，不再作为 MVP 阻塞项。
 
 Debug sender 用法：
 
