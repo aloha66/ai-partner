@@ -159,6 +159,19 @@ pnpm tauri:dev
 - Wrapper/debug CLI 不误连旧实例：旧 descriptor copy 下 `debug:discover`、`debug:send waiting` 和 `pnpm codex:wrap --descriptor <old-descriptor-copy> --codex-bin /bin/echo -- SAFE` 均返回 `descriptor_stale: Runtime descriptor process is not alive.`；默认 descriptor 下 `pnpm codex:wrap --codex-bin /bin/echo -- SAFE` 成功并发现新实例。
 - 本轮未发现需要产品代码修复的 lifecycle 缺口。未修改 `src-tauri`/Rust，未跑 `cargo test`；验证脚本和旧 descriptor copy 均位于 `/private/tmp` 且已清理，不纳入仓库。Next：把此 gate 保留为 release 前 DMG smoke regression，剩余非 lifecycle 项按 release readiness / roadmap 口径收敛。
 
+2026-06-09 M5.5-T3 Retina/high-DPI release smoke gate：
+
+- 起点：上一轮 HEAD `f12c1e7 docs(plan): reconcile release readiness gaps`；初始工作区仅有未跟踪 `.agents/`，未纳入 git。
+- 环境：内建 Retina 显示器 `5120 x 2880`，系统缩放 `UI Looks like: 2560 x 1440 @ 60Hz`，即当前 gate 在 2x Retina/high-DPI 路径下复核。
+- 使用 packaged app，不使用 `pnpm tauri:dev`。最终复核实例从 `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/macos/AI Partner.app` 以 `open -g -n` 后台启动，`pnpm debug:discover` 发现 endpoint `http://127.0.0.1:63029/events`，`appInstanceId=app_20260609T134454Z_37955_9d42c69d6f9ca41d`，pid `37955`。
+- 不抢焦点复核通过：packaged app 启动和 `pnpm debug:send waiting` 后，`osascript` 读取前台应用仍为 `Codex`。WindowServer 元信息确认 `AI Partner M0` on-screen，owner `AI Partner`，pid `37955`，layer `5`，alpha `1`，bounds `1046,314 468x325`。
+- 默认伴侣和 waiting bubble/status overlay 复核：`pnpm debug:send waiting` 成功发送到 packaged endpoint；Retina 单窗截图在旧实例曾成功保存 `/private/tmp/ai-partner-retina-waiting-window.png`，显示默认 companion、`WAITING / 等待用户输入` bubble 和右侧 status panel 均在窗口内，无裁切、重叠、明显帧漂移或模糊导致的对齐问题。
+- Click-through banner 复核中发现风险：原先 banner 使用独立 fixed overlay；为避免透明无边框 WebView + Retina 路径下提示层不可稳定取证或被底部面板遮挡，本轮做了最小前端修复，把 `穿透中 / 6s auto restore` banner 改为右侧面板内的 `role=status` 状态行，与 runtime strip 互斥显示，并锁定 `width: 100%`、非 fixed 布局和文本 ellipsis。未修改 `src-tauri`/Rust/窗口策略。
+- Click-through 行为仍走既有后端 6 秒自动恢复路径；packaged app descriptor/endpoint、WindowServer on-screen、always-on-top/focus 配置和不抢焦点信号均正常。当前自动化无法稳定证明“点击落到底层 app”这一物理手点细节；该行为沿用 2026-06-07 packaged app 真实手点证据。
+- 安全取证限制：本轮只尝试单窗口或 AI Partner bounds 小区域截图。当前 macOS 对新启动的透明无边框窗口返回 `could not create image from window/rect`，旧 `CGWindowListCreateImage` API 在 macOS 15+ SDK 不可用，ScreenCaptureKit 在 Codex 执行上下文触发 WindowServer 初始化断言；因此未扩大为全屏截图，避免捕获无关桌面内容。
+- 验证通过：`pnpm test:frontend`、`pnpm --filter @ai-partner/frontend build`、`pnpm tauri:build:app`、`pnpm smoke:dmg:preflight`、`pnpm debug:discover`、`pnpm debug:send waiting`。本轮未修改 `src-tauri`/Rust，未跑 `cargo test`。
+- 结论：Retina/high-DPI release smoke gate 通过。External multi-display 仍是 roadmap/risk note，不是 MVP blocker。
+
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
 
 ## M1 Rust State Bridge 进展
@@ -196,7 +209,7 @@ M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、
 
 Release readiness note：
 
-- Retina/high-DPI sanity 保留为 release 前 manual smoke gate，重点复核默认伴侣、bubble/status overlay、click-through banner 在当前 Retina 缩放下不裁切、不重叠、无明显帧漂移。
+- Retina/high-DPI sanity 已于 2026-06-09 完成 release 前 manual smoke gate。默认伴侣、bubble/status overlay、click-through banner 在当前 Retina 缩放下通过不裁切、不重叠、无明显帧漂移复核。
 - 当前 macOS Codex technical preview 不承诺外接多屏体验；multi-display 作为 roadmap/risk note 跟踪，不再作为 MVP 阻塞项。
 
 Debug sender 用法：

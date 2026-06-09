@@ -413,7 +413,7 @@ CODE PATHS                                             USER FLOWS
   ├── [DONE/front slice] workflow normal mappings         ├── [DONE/M0] [->E2E/manual] transparent window
   ├── [DONE/front slice] physical body override           ├── [DONE/M0] [->E2E/manual] always-on-top behavior
   ├── [DONE/front slice] waiting/error bubble priority    ├── [DONE] click-through quiet mode can recover
-  ├── [DONE/front slice] done queued under physical       ├── [RELEASE GATE] Retina/high-DPI manual smoke
+  ├── [DONE/front slice] done queued under physical       ├── [DONE/M5.5-T3] Retina/high-DPI manual smoke
   │                                                        └── [ROADMAP/RISK] external multi-display experience
   ├── [DONE/front slice] frontend queued done replay
   └── [DONE/front slice] extension -> legacy -> procedural fallback
@@ -436,7 +436,7 @@ CODE PATHS                                             USER FLOWS
 
 LLM integration: [NOT MVP] [->EVAL] only when opt-in LLM or memory ships
 
-COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription + M3 resolver/assets front slice + T5/T7 renderer integration closeout + T6 minimal physical/renderer integration closeout + T8 minimal CSS/DOM sprite renderer + T9 minimal Codex wrapper event bridge + M5 packaged app/DMG smoke + M5.5-T1 real Codex provider live run + M5.5-T2 packaged quit/restart lifecycle are tested. Transparent window and always-on-top are DONE/M0. Partner search/switch, exit confirmation, full asset loader UI and external multi-display experience are ROADMAP/NOT MVP. Retina/high-DPI remains a release-pre manual smoke gate.
+COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription + M3 resolver/assets front slice + T5/T7 renderer integration closeout + T6 minimal physical/renderer integration closeout + T8 minimal CSS/DOM sprite renderer + T9 minimal Codex wrapper event bridge + M5 packaged app/DMG smoke + M5.5-T1 real Codex provider live run + M5.5-T2 packaged quit/restart lifecycle + M5.5-T3 Retina/high-DPI release smoke are tested. Transparent window and always-on-top are DONE/M0. Partner search/switch, exit confirmation, full asset loader UI and external multi-display experience are ROADMAP/NOT MVP.
 TARGET: MVP coverage accounted before acceptance; ROADMAP/NOT MVP rows are excluded from the MVP target
 QUALITY TARGET: contracts/security/resolver/assets/wrapper need behavior + edge + error tests
 ```
@@ -528,7 +528,7 @@ Rules:
 
 Release readiness:
 
-- Retina/high-DPI sanity remains a release-pre manual smoke gate: verify the default partner, bubble/status overlay and click-through banner at the active Retina scale with no clipping, blur-driven frame drift or text overlap.
+- Retina/high-DPI sanity passed the 2026-06-09 release-pre manual smoke gate: default partner, bubble/status overlay and click-through banner were verified at active Retina scale with no clipping, blur-driven frame drift or text overlap. The banner is now rendered as an in-panel `role=status` row instead of a fixed overlay, so it stays inside the right panel footprint under Retina/WebView transparency.
 - External multi-display behavior is not an MVP commitment for the macOS Codex technical preview. Treat it as a roadmap/risk note unless the release scope explicitly adds external display UX; do not keep it as an MVP gap.
 
 Budgets:
@@ -830,6 +830,17 @@ M5.5-T2 packaged lifecycle gate record 2026-06-08：
 - 重启后生成新实例：`appInstanceId=app_20260608T000135Z_14126_cbc656b646544c97`，pid `14126`，port `62558`，`createdAt=2026-06-08T00:01:35.425752+00:00`；新 descriptor 权限仍为目录 `0700`、文件 `0600`，token 只在内存中比较，结论为 `tokenChanged=true`。
 - `pnpm debug:discover` 发现新 endpoint `http://127.0.0.1:62558/events`；`pnpm debug:send waiting` 对新实例发送成功。旧 token 打到新 endpoint 返回 HTTP `401`，旧 descriptor copy 下 `debug:discover`、`debug:send waiting` 和 `pnpm codex:wrap --descriptor <old-descriptor-copy> --codex-bin /bin/echo -- SAFE` 均返回 `descriptor_stale`；默认 descriptor 下 wrapper 成功，确认 wrapper/debug CLI 不误连旧实例。
 - 本轮未修改产品功能，未修改 `src-tauri`/Rust，未跑 `cargo test`。临时验证脚本和旧 descriptor copy 只在 `/private/tmp` 使用并已清理；`.agents/` 仍不纳入 git。Next：把此 gate 保留为 release 前 DMG smoke regression，下一步优先收敛剩余非 lifecycle 的 MVP gap。
+
+M5.5-T3 Retina/high-DPI release smoke gate record 2026-06-09：
+
+- 起点：HEAD `f12c1e7 docs(plan): reconcile release readiness gaps`；初始工作区仅有未跟踪 `.agents/`，未纳入 git。
+- 环境：内建 Retina 显示器 `5120 x 2880`，系统缩放 `UI Looks like: 2560 x 1440 @ 60Hz`，即 2x Retina/high-DPI 路径。
+- 使用 packaged app，不使用 `pnpm tauri:dev`。最终实例 `appInstanceId=app_20260609T134454Z_37955_9d42c69d6f9ca41d`，pid `37955`，endpoint `http://127.0.0.1:63029/events`；`pnpm debug:discover` / `pnpm debug:send waiting` 均通过。
+- 不抢焦点和窗口行为通过：启动与 waiting 事件后前台应用仍为 `Codex`；WindowServer 元信息确认 `AI Partner M0` on-screen，owner `AI Partner`，layer `5`，alpha `1`，bounds `1046,314 468x325`。
+- 默认伴侣、waiting bubble/status overlay 通过 Retina 视觉复核；旧实例安全单窗截图 `/private/tmp/ai-partner-retina-waiting-window.png` 显示 companion、`WAITING / 等待用户输入` bubble 和右侧状态面板均未裁切、未重叠、无明显 frame drift / blur / 对齐问题。
+- Click-through banner 做了最小前端修复：由 fixed overlay 改为右侧面板内 `role=status` 状态行，与 runtime strip 互斥显示，`frontend/src/layoutSanity.test.ts` 锁定 `width: 100%` 且非 fixed 布局。未修改 `src-tauri`/Rust/窗口策略。
+- 安全取证限制：仅尝试单窗口或 AI Partner bounds 小区域截图；新实例上 `screencapture -l/-R` 返回 `could not create image from window/rect`，旧 `CGWindowListCreateImage` API 在当前 SDK 不可用，ScreenCaptureKit 在 Codex 执行上下文触发 WindowServer 初始化断言。未扩大为全屏截图，避免捕获无关桌面内容。
+- 验证通过：`pnpm test:frontend`、`pnpm --filter @ai-partner/frontend build`、`pnpm tauri:build:app`、`pnpm smoke:dmg:preflight`。结论：Retina/high-DPI release smoke gate 通过；external multi-display 仍为 roadmap/risk note，不是 MVP blocker。
 
 Tasks:
 

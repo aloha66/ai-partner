@@ -517,21 +517,21 @@ export function App() {
           </button>
         </div>
 
-        <div className="runtime-strip">
-          <Move size={14} aria-hidden />
-          <span>{dragging ? "drg" : "spr"}</span>
-          <ArrowDownToLine size={14} aria-hidden />
-          <span>{runtimeRunStatus(stateDisplay.runLabel)}</span>
-          <span>{stateCommandStatus}</span>
-          <span>{recoveryStatus}</span>
-        </div>
-
         {clickThrough ? (
-          <div className="click-through-banner">
+          <div className="click-through-banner" role="status">
             <span>穿透中</span>
             <strong>6s auto restore</strong>
           </div>
-        ) : null}
+        ) : (
+          <div className="runtime-strip">
+            <Move size={14} aria-hidden />
+            <span>{dragging ? "drg" : "spr"}</span>
+            <ArrowDownToLine size={14} aria-hidden />
+            <span>{runtimeRunStatus(stateDisplay.runLabel)}</span>
+            <span>{stateCommandStatus}</span>
+            <span>{recoveryStatus}</span>
+          </div>
+        )}
       </aside>
     </main>
   );

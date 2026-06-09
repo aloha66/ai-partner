@@ -70,6 +70,8 @@ describe("default 520x360 renderer layout sanity", () => {
 
     expect(layout.clickBannerWidth).toBeLessThanOrEqual(layout.panelWidth);
     expect(bannerOuterHeight + layout.padding).toBeLessThan(layout.windowHeight);
+    expect(styles).toMatch(/\.click-through-banner\s*\{[^}]*width:\s*100%;/s);
+    expect(styles).not.toMatch(/\.click-through-banner\s*\{[^}]*position:\s*fixed;/s);
   });
 
   it("keeps runtime strip labels short enough for the default right panel", () => {

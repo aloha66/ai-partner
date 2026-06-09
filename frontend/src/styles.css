@@ -306,12 +306,13 @@ button {
 }
 
 .click-through-banner {
-  position: fixed;
-  right: var(--t8-window-padding);
-  bottom: var(--t8-window-padding);
-  z-index: 20;
   box-sizing: border-box;
-  width: var(--t8-click-banner-width);
+  width: 100%;
+  min-height: calc(
+    var(--t8-click-banner-line-height) +
+    2 * var(--t8-click-banner-padding) +
+    2 * var(--t8-click-banner-border)
+  );
   padding: var(--t8-click-banner-padding);
   border: var(--t8-click-banner-border) solid #f59e0b;
   border-radius: 6px;
@@ -320,6 +321,15 @@ button {
   font-size: 10px;
   line-height: var(--t8-click-banner-line-height);
   justify-content: space-between;
+  overflow: hidden;
+}
+
+.click-through-banner strong,
+.click-through-banner span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 460px) {
