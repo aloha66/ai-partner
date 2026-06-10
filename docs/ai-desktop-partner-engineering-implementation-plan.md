@@ -436,7 +436,7 @@ CODE PATHS                                             USER FLOWS
 
 LLM integration: [NOT MVP] [->EVAL] only when opt-in LLM or memory ships
 
-COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription + M3 resolver/assets front slice + T5/T7 renderer integration closeout + T6 minimal physical/renderer integration closeout + T8 minimal CSS/DOM sprite renderer + T9 minimal Codex wrapper event bridge + M5 packaged app/DMG smoke + M5.5-T1 real Codex provider live run + M5.5-T2 packaged quit/restart lifecycle + M5.5-T3 Retina/high-DPI release smoke are tested. Transparent window and always-on-top are DONE/M0. Partner search/switch, exit confirmation, full asset loader UI and external multi-display experience are ROADMAP/NOT MVP.
+COVERAGE NOW: M0 + contracts + M1 minimal Rust State Bridge + localhost ingress/descriptor paths + debug sender/discovery + M2 minimal renderer state subscription + M3 resolver/assets front slice + T5/T7 renderer integration closeout + T6 minimal physical/renderer integration closeout + T8 minimal CSS/DOM sprite renderer + T9 minimal Codex wrapper event bridge + M5 packaged app/DMG smoke + M5.5-T1 real Codex provider live run + M5.5-T2 packaged quit/restart lifecycle + M5.5-T3 Retina/high-DPI release smoke + 2026-06-11 MVP DMG readiness smoke are tested. Transparent window and always-on-top are DONE/M0. Partner search/switch, exit confirmation, full asset loader UI and external multi-display experience are ROADMAP/NOT MVP.
 TARGET: MVP coverage accounted before acceptance; ROADMAP/NOT MVP rows are excluded from the MVP target
 QUALITY TARGET: contracts/security/resolver/assets/wrapper need behavior + edge + error tests
 ```
@@ -530,6 +530,7 @@ Release readiness:
 
 - Retina/high-DPI sanity passed the 2026-06-09 release-pre manual smoke gate: default partner, bubble/status overlay and click-through banner were verified at active Retina scale with no clipping, blur-driven frame drift or text overlap. The banner is now rendered as an in-panel `role=status` row instead of a fixed overlay, so it stays inside the right panel footprint under Retina/WebView transparency.
 - Real Petdex/Codex Desktop golden asset smoke passed the 2026-06-10 release-pre gate with Artoria from the local pet roots. MVP scope remains one default/configured golden asset; partner search/switch, marketplace and multi-asset management stay roadmap. The smoke path uses `VITE_AI_PARTNER_DEFAULT_ATLAS_PATH` only for local verification and does not copy or commit private pet assets.
+- MVP DMG readiness smoke passed on 2026-06-11 from `AI Partner_0.1.0_aarch64.dmg`: read-only mount verified the DMG contents, a temp installed packaged app launched without taking focus, `debug:discover` found the descriptor endpoint, `debug:send waiting/done` drove the same run, and AX/WindowServer metadata confirmed the default `AI Partner M0` window remained visible and unfocused.
 - External multi-display behavior is not an MVP commitment for the macOS Codex technical preview. Treat it as a roadmap/risk note unless the release scope explicitly adds external display UX; do not keep it as an MVP gap.
 
 Budgets:

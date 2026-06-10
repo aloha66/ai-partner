@@ -184,6 +184,20 @@ pnpm tauri:dev
 - 验证通过：真实资产临时 validator smoke、`pnpm test`、`pnpm test:typecheck`、`pnpm smoke:dmg:preflight`、`pnpm tauri:build:app`、`pnpm package:dmg`（首次 sandbox 下 `hdiutil create` 返回“设备未配置”，提权重跑通过）、`cargo test`。
 - 结论：真实 Petdex/Codex Desktop 宠物作为单 golden asset 的 MVP smoke gate 通过；剩余 partner selection/search/marketplace/多资产管理仍是 roadmap，不是 MVP blocker。
 
+2026-06-11 MVP DMG readiness smoke：
+
+- 起点：HEAD `d7039e1 test(frontend): add petdex visual smoke coverage`；初始工作区只有未跟踪 `.agents/`，未纳入 git。
+- `pnpm package:dmg` 首次在 sandbox 下仍因 `hdiutil create` 返回“设备未配置”，提权重跑通过；preflight、Tauri app build、frontend typed build 均随 package 流程通过。
+- 生成 DMG：`/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/dmg/AI Partner_0.1.0_aarch64.dmg`，大小 `2.9M`。packaged app 同时位于 `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/macos/AI Partner.app`。
+- DMG 以只读方式挂载到 `/Volumes/AI Partner`，CRC 校验通过。卷内包含 `AI Partner.app`（约 `8.4M`）和 `Applications -> /Applications` symlink。
+- 从 DMG 复制安装到 `/private/tmp/ai-partner-mvp-dmg-smoke.JhM3Vu/AI Partner.app` 后以 `open -g -n` 后台启动，未使用 `pnpm tauri:dev`。启动前后前台应用保持 `Codex`，`System Events` 显示 AI Partner `frontmost=false`。
+- Runtime descriptor 写出到 `${TMPDIR}/ai-partner/runtime-descriptor.json`，目录权限 `0700`、文件权限 `0600`；descriptor 指向 pid `53364`、port `64889`、`appInstanceId=app_20260610T232838Z_53364_e17aa81b660a2fc3`，token 只记录 `tokenLength=64`，未记录 token。
+- `pnpm debug:discover` 在 sandbox 网络下返回 `EPERM`，提权后通过，发现 `http://127.0.0.1:64889/events`。`ps` 确认 pid `53364` 来自临时安装路径，`lsof` 确认该 pid 监听 `127.0.0.1:64889`。
+- 默认伴侣可见性以 AX/WindowServer 元数据复核：窗口 `AI Partner M0` 存在，`position=1741,278`，`size=520,360`，`focused=false`。本轮未使用全屏截图，也未把后半段可能出现的黑帧作为视觉证据。
+- `pnpm debug:send waiting` 与 `pnpm debug:send done` 均发送成功，`done` 复用 waiting 的 `run_id=run_debug_2026-06-10T23:29:57.492Z_c71928be-a9b9-43aa-86e6-7127420c212b`。发送 waiting 和 done 后前台应用仍为 `Codex`，AI Partner 窗口仍 `frontmost=false`、`focused=false`。
+- 本轮未发现 release blocker，未修改产品代码；smoke 后已停止临时 packaged app 实例并卸载 DMG。
+- 结论：MVP DMG readiness smoke 通过；packaged DMG 能安装/启动，默认伴侣窗口可见，本机 endpoint 可发现，waiting/done 可驱动状态，启动和事件发送均不抢焦点。
+
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
 
 ## M1 Rust State Bridge 进展
