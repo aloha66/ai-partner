@@ -5,6 +5,7 @@ export {
   PETDEX_CELL_WIDTH,
   PETDEX_COLUMNS,
   PETDEX_ROWS,
+  petdexFrameCounts,
   petdexRows,
   type PetdexRow
 } from "@ai-partner/assets/petdex";

@@ -529,6 +529,7 @@ Rules:
 Release readiness:
 
 - Retina/high-DPI sanity passed the 2026-06-09 release-pre manual smoke gate: default partner, bubble/status overlay and click-through banner were verified at active Retina scale with no clipping, blur-driven frame drift or text overlap. The banner is now rendered as an in-panel `role=status` row instead of a fixed overlay, so it stays inside the right panel footprint under Retina/WebView transparency.
+- Real Petdex/Codex Desktop golden asset smoke passed the 2026-06-10 release-pre gate with Artoria from the local pet roots. MVP scope remains one default/configured golden asset; partner search/switch, marketplace and multi-asset management stay roadmap. The smoke path uses `VITE_AI_PARTNER_DEFAULT_ATLAS_PATH` only for local verification and does not copy or commit private pet assets.
 - External multi-display behavior is not an MVP commitment for the macOS Codex technical preview. Treat it as a roadmap/risk note unless the release scope explicitly adds external display UX; do not keep it as an MVP gap.
 
 Budgets:

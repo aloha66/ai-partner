@@ -43,7 +43,7 @@ import {
   type PhysicalMachineEvent
 } from "./physicalStateMachine";
 import { PartnerRenderer } from "./spriteRenderer";
-import { buildProbeAtlasDataUrl } from "./spriteProbe";
+import { defaultAtlasUrl } from "./defaultAtlas";
 import "./styles.css";
 
 type DragState = {
@@ -124,7 +124,7 @@ export function App() {
     recover: null
   });
   const stateRevisionRef = useRef(0);
-  const probeAtlas = useMemo(() => buildProbeAtlasDataUrl(), []);
+  const atlasUrl = useMemo(() => defaultAtlasUrl(), []);
   const physicalState = physicalMachine.state;
   const dragging = physicalState === "carried" || physicalState === "struggling";
   const animationIntent = useMemo(
@@ -399,7 +399,7 @@ export function App() {
         <PartnerRenderer
           intent={animationIntent}
           frameIndex={frameIndex}
-          atlasUrl={probeAtlas}
+          atlasUrl={atlasUrl}
           dragging={dragging}
           onPointerDown={(event) => void beginManagedDrag(event)}
           onPointerMove={updateManagedDrag}

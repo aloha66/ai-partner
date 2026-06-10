@@ -9,6 +9,7 @@ import {
   PETDEX_COLUMNS,
   PETDEX_ATLAS_HEIGHT,
   PETDEX_ATLAS_WIDTH,
+  petdexFrameCounts,
   type PetdexRow
 } from "@ai-partner/assets/petdex";
 import { spriteFrame, type SpriteFrame } from "./spriteProbe";
@@ -40,6 +41,9 @@ export interface SpriteRenderModel {
   animation: AnimationRef;
   row: PetdexRow;
   frame: SpriteFrame;
+  atlasKind: "asset" | "url" | "probe";
+  atlasUrl: string;
+  atlasStyle: CSSProperties;
   className: string;
   style: CSSProperties;
   loop: boolean;
@@ -72,8 +76,29 @@ export function normalizeSpriteColumn(frameIndex: number): number {
   return ((Math.trunc(frameIndex) % PETDEX_COLUMNS) + PETDEX_COLUMNS) % PETDEX_COLUMNS;
 }
 
+export function normalizeSpriteColumnForRow(row: PetdexRow, frameIndex: number): number {
+  const frameCount = petdexFrameCounts[row] ?? PETDEX_COLUMNS;
+  if (!Number.isInteger(frameCount) || frameCount < 1 || frameCount > PETDEX_COLUMNS) {
+    return normalizeSpriteColumn(frameIndex);
+  }
+  if (!Number.isFinite(frameIndex)) {
+    return 0;
+  }
+  return ((Math.trunc(frameIndex) % frameCount) + frameCount) % frameCount;
+}
+
 function scaledSpritePixels(value: number): number {
   return value * DEFAULT_SPRITE_SCALE;
+}
+
+function atlasKind(atlasUrl: string): SpriteRenderModel["atlasKind"] {
+  if (atlasUrl.startsWith("asset:") || atlasUrl.includes("://asset.localhost/")) {
+    return "asset";
+  }
+  if (atlasUrl.startsWith("data:image/svg+xml")) {
+    return "probe";
+  }
+  return "url";
 }
 
 export function spriteRenderModelForIntent(
@@ -82,7 +107,7 @@ export function spriteRenderModelForIntent(
   atlasUrl: string
 ): SpriteRenderModel {
   const row = petdexRowForAnimation(intent.body.animation);
-  const frame = spriteFrame(row, normalizeSpriteColumn(frameIndex));
+  const frame = spriteFrame(row, normalizeSpriteColumnForRow(row, frameIndex));
   const width = scaledSpritePixels(frame.width);
   const height = scaledSpritePixels(frame.height);
   const procedural = [...intent.body.procedural].sort();
@@ -96,17 +121,19 @@ export function spriteRenderModelForIntent(
     animation: intent.body.animation,
     row,
     frame,
+    atlasKind: atlasKind(atlasUrl),
+    atlasUrl,
+    atlasStyle: {
+      width: scaledSpritePixels(PETDEX_ATLAS_WIDTH),
+      height: scaledSpritePixels(PETDEX_ATLAS_HEIGHT),
+      transform: `translate3d(-${frame.columnIndex * width}px, -${frame.rowIndex * height}px, 0)`
+    },
     className,
     loop: intent.body.loop,
     procedural,
     style: {
       width,
-      height,
-      backgroundImage: `url("${atlasUrl}")`,
-      backgroundSize: `${scaledSpritePixels(PETDEX_ATLAS_WIDTH)}px ${scaledSpritePixels(
-        PETDEX_ATLAS_HEIGHT
-      )}px`,
-      backgroundPosition: `-${frame.columnIndex * width}px -${frame.rowIndex * height}px`
+      height
     }
   };
 }
@@ -122,8 +149,17 @@ export function SpriteRenderer({ intent, frameIndex, atlasUrl }: SpriteRendererP
       data-sprite-scale={DEFAULT_SPRITE_SCALE}
       data-sprite-column={model.frame.columnIndex}
       data-sprite-row={model.row}
+      data-atlas-kind={model.atlasKind}
       style={model.style}
-    />
+    >
+      <img
+        className="sprite-atlas"
+        src={model.atlasUrl}
+        style={model.atlasStyle}
+        alt=""
+        draggable={false}
+      />
+    </div>
   );
 }
 

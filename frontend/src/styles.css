@@ -117,10 +117,18 @@ button {
 
 .sprite-frame {
   image-rendering: pixelated;
-  background-repeat: no-repeat;
-  background-color: transparent;
+  overflow: hidden;
   transform: translateZ(0);
   transform-origin: bottom center;
+}
+
+.sprite-atlas {
+  display: block;
+  max-width: none;
+  user-select: none;
+  pointer-events: none;
+  image-rendering: pixelated;
+  transform-origin: top left;
 }
 
 .sprite-frame.effect-shake {

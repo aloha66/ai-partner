@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { resolvePartnerIntent } from "./animationIntentView";
 import {
   normalizeSpriteColumn,
+  normalizeSpriteColumnForRow,
   petdexRowForAnimation,
   spriteRenderModelForIntent,
   DEFAULT_SPRITE_SCALE
@@ -38,10 +39,16 @@ describe("sprite renderer model", () => {
 
     expect(model.style).toMatchObject({
       width: 168,
-      height: 182,
-      backgroundSize: "1344px 1638px",
-      backgroundPosition: "-0px -0px"
+      height: 182
     });
+    expect(model.atlasStyle).toMatchObject({
+      width: 1344,
+      height: 1638,
+      transform: "translate3d(-0px, -0px, 0)"
+    });
+    expect(spriteRenderModelForIntent(resolvePartnerIntent(snapshot("idle"), "normal"), 0, "asset://localhost/%2Ftmp%2Fspritesheet.webp").atlasKind).toBe("asset");
+    expect(spriteRenderModelForIntent(resolvePartnerIntent(snapshot("idle"), "normal"), 0, "data:image/svg+xml,probe").atlasKind).toBe("probe");
+    expect(spriteRenderModelForIntent(resolvePartnerIntent(snapshot("idle"), "normal"), 0, "https://example.test/spritesheet.webp").atlasKind).toBe("url");
   });
 
   it("maps resolver legacy animations to Petdex atlas rows", () => {
@@ -58,10 +65,13 @@ describe("sprite renderer model", () => {
     });
     expect(model.style).toMatchObject({
       width: 168,
-      height: 182,
-      backgroundImage: 'url("probe-atlas")',
-      backgroundSize: "1344px 1638px",
-      backgroundPosition: "-504px -1456px"
+      height: 182
+    });
+    expect(model.atlasUrl).toBe("probe-atlas");
+    expect(model.atlasStyle).toMatchObject({
+      width: 1344,
+      height: 1638,
+      transform: "translate3d(-504px, -1456px, 0)"
     });
     expect(model.className).toBe("sprite-frame is-looping");
   });
@@ -150,7 +160,7 @@ describe("sprite renderer model", () => {
     expect(model.className).toBe("sprite-frame is-once");
     expect(model.frame).toMatchObject({
       row: "waving",
-      columnIndex: 4
+      columnIndex: 0
     });
   });
 
@@ -160,7 +170,23 @@ describe("sprite renderer model", () => {
     expect(normalizeSpriteColumn(Number.NaN)).toBe(0);
 
     const intent = resolvePartnerIntent(snapshot("idle"), "normal");
-    expect(spriteRenderModelForIntent(intent, 10, "probe-atlas").frame.columnIndex).toBe(2);
+    expect(spriteRenderModelForIntent(intent, 10, "probe-atlas").frame.columnIndex).toBe(4);
+  });
+
+  it("skips Petdex transparent padding columns for rows with fewer visible frames", () => {
+    expect(normalizeSpriteColumnForRow("waiting", 5)).toBe(5);
+    expect(normalizeSpriteColumnForRow("waiting", 6)).toBe(0);
+    expect(normalizeSpriteColumnForRow("waving", 4)).toBe(0);
+    expect(normalizeSpriteColumnForRow("jumping", -1)).toBe(4);
+
+    const waiting = spriteRenderModelForIntent(
+      resolvePartnerIntent(snapshot("waiting"), "normal"),
+      7,
+      "probe-atlas"
+    );
+
+    expect(waiting.row).toBe("waiting");
+    expect(waiting.frame.columnIndex).toBe(1);
   });
 
   it("maps canonical intent refs to default Petdex rows before legacy fallback", () => {

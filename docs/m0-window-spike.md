@@ -172,6 +172,18 @@ pnpm tauri:dev
 - 验证通过：`pnpm test:frontend`、`pnpm --filter @ai-partner/frontend build`、`pnpm tauri:build:app`、`pnpm smoke:dmg:preflight`、`pnpm debug:discover`、`pnpm debug:send waiting`。本轮未修改 `src-tauri`/Rust，未跑 `cargo test`。
 - 结论：Retina/high-DPI release smoke gate 通过。External multi-display 仍是 roadmap/risk note，不是 MVP blocker。
 
+2026-06-10 M5.5-T4 real pet golden asset smoke gate：
+
+- 起点：HEAD `7b00261 fix(frontend): stabilize click-through banner on retina`；初始工作区只有未跟踪 `.agents/`，未纳入 git。
+- 真实资产发现：`/Users/aloha66/.petdex/pets/artoria/` 与 `/Users/aloha66/.codex/pets/artoria/` 均包含 `pet.json + spritesheet.webp`。`pet.json` 只声明 `id=artoria`、`displayName=Artoria`、`spritesheetPath=spritesheet.webp`；未提供 `ai-partner.animations.json`。spritesheet 为 `1536x1872` RGBA WebP，符合 Petdex `192x208 * 8x9` atlas contract。
+- MVP 边界确认：本轮只支持一个默认/配置 golden asset，不做 partner search/switch、资产市场或管理 UI，不复制或提交用户私有素材。真实资产通过显式环境变量 `VITE_AI_PARTNER_DEFAULT_ATLAS_PATH=/Users/aloha66/.petdex/pets/artoria/spritesheet.webp` 注入到 dev/build smoke；默认发布构建不设置该变量，仍使用内置 probe atlas。
+- 兼容性发现与最小修复：WKWebView/Tauri 窗口对该大 WebP data URL / file URL 显示不稳定；本轮把显式 golden asset smoke 路径在 Vite build layer 转成 PNG data URL，再交给前端 renderer。前端 sprite 从 CSS background 改为 `<img>` atlas + overflow clip，避免真实 atlas URL 在 background 中不可见；Petdex 行帧数固定为真实非透明列，避免 idle/waving/waiting/running/review 行循环到透明 padding。
+- 状态映射：无 manifest 时走默认 Petdex capabilities + resolver fallback；`idle -> idle`、`running/editing -> running`、`reading -> review`、`waiting -> waiting`、`error -> failed`、`done -> waving`。`waiting/error` bubble 优先级在 physical override 下由 resolver/renderer tests 覆盖；drag/physical 不改变 workflow bubble 语义。
+- 真实窗口 smoke：使用 Tauri dev app + Artoria golden asset，单窗口截图验证 idle 本体可见、running/reading/editing 合理动作可见，bubble/status overlay 在 520x360 Retina 路径下未裁切、不重叠，窗口透明/置顶仍保持 M0 形态。快速 debug event 截图受 ingress debounce / trailing flush 节奏影响，不能把每张截图当成逐状态 UI ground truth；状态映射以 resolver/renderer tests 和 Rust state tests 为准。
+- Click-through banner：本轮坐标自动点击未稳定触发按钮，未扩大为全桌面截图或无界点击。Retina click-through banner 布局仍由 2026-06-09 gate 与 `layoutSanity.test.ts` 覆盖，本轮未改 banner/窗口策略。
+- 验证通过：真实资产临时 validator smoke、`pnpm test`、`pnpm test:typecheck`、`pnpm smoke:dmg:preflight`、`pnpm tauri:build:app`、`pnpm package:dmg`（首次 sandbox 下 `hdiutil create` 返回“设备未配置”，提权重跑通过）、`cargo test`。
+- 结论：真实 Petdex/Codex Desktop 宠物作为单 golden asset 的 MVP smoke gate 通过；剩余 partner selection/search/marketplace/多资产管理仍是 roadmap，不是 MVP blocker。
+
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
 
 ## M1 Rust State Bridge 进展

@@ -30,6 +30,18 @@ export const petdexRows: PetdexRow[] = [
   "review"
 ];
 
+export const petdexFrameCounts: Record<PetdexRow, number> = {
+  idle: 6,
+  "running-right": 8,
+  "running-left": 8,
+  waving: 4,
+  jumping: 5,
+  failed: 8,
+  waiting: 6,
+  running: 6,
+  review: 6
+};
+
 export const legacyAnimationByPetdexRow: Record<PetdexRow, AnimationRef> = {
   idle: "legacy.idle",
   "running-right": "legacy.running-right",
