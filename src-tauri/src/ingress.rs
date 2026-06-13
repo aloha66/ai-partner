@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, VecDeque};
 use std::fs::{self, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -493,6 +493,7 @@ fn handle_connection(mut stream: TcpStream, gate: Arc<IngressGate>, handler: Eve
 
 fn read_http_request(stream: &mut impl Read) -> Result<HttpRequest, HttpRejection> {
     let mut bytes = Vec::new();
+    let read_deadline = Instant::now() + READ_TIMEOUT;
     let header_end = loop {
         if let Some(header_end) = find_header_end(&bytes) {
             if header_end > MAX_HEADER_BYTES {
@@ -505,9 +506,7 @@ fn read_http_request(stream: &mut impl Read) -> Result<HttpRequest, HttpRejectio
         }
 
         let mut chunk = [0_u8; 1024];
-        let read = stream
-            .read(&mut chunk)
-            .map_err(|_| HttpRejection::new(400, "request_read_failed"))?;
+        let read = read_http_chunk(stream, &mut chunk, read_deadline)?;
         if read == 0 {
             return Err(HttpRejection::new(400, "incomplete_request"));
         }
@@ -548,6 +547,15 @@ fn read_http_request(stream: &mut impl Read) -> Result<HttpRequest, HttpRejectio
         headers.push((name.trim().to_string(), value.trim().to_string()));
     }
 
+    if method != "POST" {
+        return Ok(HttpRequest {
+            method,
+            path,
+            headers,
+            body: Vec::new(),
+        });
+    }
+
     if header_values(&headers, "transfer-encoding")
         .iter()
         .flat_map(|value| value.split(','))
@@ -573,9 +581,7 @@ fn read_http_request(stream: &mut impl Read) -> Result<HttpRequest, HttpRejectio
     let body_start = header_end + 4;
     while bytes.len() < body_start + content_length {
         let mut chunk = [0_u8; 1024];
-        let read = stream
-            .read(&mut chunk)
-            .map_err(|_| HttpRejection::new(400, "request_read_failed"))?;
+        let read = read_http_chunk(stream, &mut chunk, read_deadline)?;
         if read == 0 {
             return Err(HttpRejection::new(400, "incomplete_body"));
         }
@@ -588,6 +594,42 @@ fn read_http_request(stream: &mut impl Read) -> Result<HttpRequest, HttpRejectio
         headers,
         body: bytes[body_start..body_start + content_length].to_vec(),
     })
+}
+
+fn read_http_chunk(
+    stream: &mut impl Read,
+    chunk: &mut [u8],
+    deadline: Instant,
+) -> Result<usize, HttpRejection> {
+    loop {
+        match stream.read(chunk) {
+            Ok(read) => return Ok(read),
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+            Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                if Instant::now() >= deadline {
+                    return Err(HttpRejection::new(400, "request_read_timed_out"));
+                }
+                thread::sleep(Duration::from_millis(1));
+                continue;
+            }
+            Err(error) => {
+                return Err(HttpRejection::new(
+                    400,
+                    request_read_failed_code(error.kind()),
+                ))
+            }
+        }
+    }
+}
+
+fn request_read_failed_code(kind: ErrorKind) -> &'static str {
+    match kind {
+        ErrorKind::TimedOut => "request_read_timed_out",
+        ErrorKind::WouldBlock => "request_read_would_block",
+        ErrorKind::ConnectionReset => "request_read_connection_reset",
+        ErrorKind::ConnectionAborted => "request_read_connection_aborted",
+        _ => "request_read_failed",
+    }
 }
 
 fn parse_event_payload(body: &[u8]) -> Result<WorkflowEventWire, HttpRejection> {
@@ -875,12 +917,15 @@ fn set_owner_only_dir_permissions(_path: &Path) -> Result<(), String> {
 
 struct HttpResponse {
     status: u16,
-    body: &'static str,
+    body: String,
 }
 
 impl HttpResponse {
-    fn json(status: u16, body: &'static str) -> Self {
-        Self { status, body }
+    fn json(status: u16, body: impl Into<String>) -> Self {
+        Self {
+            status,
+            body: body.into(),
+        }
     }
 
     fn into_bytes(self) -> Vec<u8> {
@@ -899,14 +944,14 @@ impl HttpResponse {
 impl HttpRejection {
     fn into_response(self) -> HttpResponse {
         let body = match self.code {
-            "payload_too_large" => r#"{"ok":false,"error":"payload_too_large"}"#,
+            "payload_too_large" => r#"{"ok":false,"error":"payload_too_large"}"#.to_string(),
             "missing_bearer_token" | "invalid_bearer_token" => {
-                r#"{"ok":false,"error":"unauthorized"}"#
+                r#"{"ok":false,"error":"unauthorized"}"#.to_string()
             }
             "origin_rejected" | "cors_preflight_rejected" => {
-                r#"{"ok":false,"error":"origin_rejected"}"#
+                r#"{"ok":false,"error":"origin_rejected"}"#.to_string()
             }
-            _ => r#"{"ok":false,"error":"bad_request"}"#,
+            code => format!(r#"{{"ok":false,"error":"{code}"}}"#),
         };
 
         HttpResponse::json(self.status, body)
@@ -934,8 +979,59 @@ fn status_text(status: u16) -> &'static str {
 mod tests {
     use super::*;
     use crate::state::{WorkflowSource, WorkflowState, WORKFLOW_EVENT_SCHEMA_VERSION};
+    use std::io::{Error, Read};
     fn token() -> String {
         "test_runtime_token_1234567890".to_string()
+    }
+
+    struct InterruptedOnce {
+        bytes: std::io::Cursor<Vec<u8>>,
+        interrupted: bool,
+    }
+
+    impl InterruptedOnce {
+        fn new(bytes: Vec<u8>) -> Self {
+            Self {
+                bytes: std::io::Cursor::new(bytes),
+                interrupted: false,
+            }
+        }
+    }
+
+    impl Read for InterruptedOnce {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if !self.interrupted {
+                self.interrupted = true;
+                return Err(Error::from(ErrorKind::Interrupted));
+            }
+
+            self.bytes.read(buf)
+        }
+    }
+
+    struct WouldBlockOnce {
+        bytes: std::io::Cursor<Vec<u8>>,
+        blocked: bool,
+    }
+
+    impl WouldBlockOnce {
+        fn new(bytes: Vec<u8>) -> Self {
+            Self {
+                bytes: std::io::Cursor::new(bytes),
+                blocked: false,
+            }
+        }
+    }
+
+    impl Read for WouldBlockOnce {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if !self.blocked {
+                self.blocked = true;
+                return Err(Error::from(ErrorKind::WouldBlock));
+            }
+
+            self.bytes.read(buf)
+        }
     }
 
     fn event(event_id: &str, run_id: &str, workflow_state: WorkflowState) -> WorkflowEventWire {
@@ -1172,6 +1268,55 @@ mod tests {
                 .code,
             "headers_too_large"
         );
+    }
+
+    #[test]
+    fn parser_allows_bodyless_method_probe_to_reach_method_rejection() {
+        let raw = b"GET /events HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+        let request = read_http_request(&mut std::io::Cursor::new(raw))
+            .expect("bodyless method probe should parse");
+
+        assert_eq!(request.method, "GET");
+        assert_eq!(request.path, "/events");
+        assert!(request.body.is_empty());
+
+        let gate = IngressGate::new(token());
+        let rejection = gate
+            .validate_request(request)
+            .expect_err("GET probe should be rejected after parsing");
+        assert_eq!(rejection.status, 405);
+        assert_eq!(rejection.code, "method_not_allowed");
+    }
+
+    #[test]
+    fn parser_retries_interrupted_reads() {
+        let raw = b"GET /events HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+        let mut reader = InterruptedOnce::new(raw.to_vec());
+
+        let request = read_http_request(&mut reader).expect("interrupted read should retry");
+
+        assert_eq!(request.method, "GET");
+        assert_eq!(request.path, "/events");
+    }
+
+    #[test]
+    fn parser_retries_would_block_reads_until_deadline() {
+        let raw = b"GET /events HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+        let mut reader = WouldBlockOnce::new(raw.to_vec());
+
+        let request = read_http_request(&mut reader).expect("would-block read should retry");
+
+        assert_eq!(request.method, "GET");
+        assert_eq!(request.path, "/events");
+    }
+
+    #[test]
+    fn rejection_response_includes_specific_local_error_code() {
+        let response = HttpRejection::new(400, "invalid_content_length").into_response();
+
+        let text = String::from_utf8(response.into_bytes()).expect("response should be utf8");
+        assert!(text.starts_with("HTTP/1.1 400 Bad Request"));
+        assert!(text.ends_with(r#"{"ok":false,"error":"invalid_content_length"}"#));
     }
 
     #[test]

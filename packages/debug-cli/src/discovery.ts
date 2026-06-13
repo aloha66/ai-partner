@@ -155,9 +155,27 @@ export function defaultProcessAlive(pid: number): boolean {
 
 export async function assertEndpointReachable(
   port: number,
-  timeoutMs = defaultConnectTimeoutMs
+  timeoutMs = defaultConnectTimeoutMs,
+  probe: (
+    port: number,
+    timeoutMs: number
+  ) => Promise<{ status: number; body: string }> = probeEndpointReachable
 ): Promise<void> {
-  const status = await new Promise<number>((resolve, reject) => {
+  const result = await probe(port, timeoutMs);
+
+  if (result.status !== 405) {
+    throw new DebugCliError(
+      `Endpoint 127.0.0.1:${port} responded with unexpected HTTP ${result.status}${formatEndpointBody(result.body)}.`,
+      "endpoint_unreachable"
+    );
+  }
+}
+
+function probeEndpointReachable(
+  port: number,
+  timeoutMs: number
+): Promise<{ status: number; body: string }> {
+  return new Promise<{ status: number; body: string }>((resolve, reject) => {
     let settled = false;
     const req = request(
       {
@@ -171,12 +189,18 @@ export async function assertEndpointReachable(
         timeout: timeoutMs
       },
       (res) => {
-        res.resume();
-        res.on("end", () => finish(undefined, res.statusCode ?? 0));
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () =>
+          finish(undefined, {
+            status: res.statusCode ?? 0,
+            body: Buffer.concat(chunks).toString("utf8")
+          })
+        );
       }
     );
 
-    function finish(error?: Error, status = 0): void {
+    function finish(error?: Error, result = { status: 0, body: "" }): void {
       if (settled) {
         return;
       }
@@ -185,7 +209,7 @@ export async function assertEndpointReachable(
       if (error) {
         reject(new DebugCliError(error.message, "endpoint_unreachable"));
       } else {
-        resolve(status);
+        resolve(result);
       }
     }
 
@@ -195,13 +219,11 @@ export async function assertEndpointReachable(
     req.on("error", (error) => finish(error));
     req.end();
   });
+}
 
-  if (status !== 405) {
-    throw new DebugCliError(
-      `Endpoint 127.0.0.1:${port} responded with unexpected HTTP ${status}.`,
-      "endpoint_unreachable"
-    );
-  }
+function formatEndpointBody(body: string): string {
+  const trimmed = body.trim();
+  return trimmed.length === 0 ? "" : `: ${trimmed.slice(0, 200)}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -1,6 +1,6 @@
 # AI Partner MVP 内测分发说明
 
-日期：2026-06-12
+日期：2026-06-13
 对象：1-3 位 Apple Silicon macOS 技术内测者。
 
 这份文档是当前内部 DMG 的测试者操作单。Release 身份、范围、ready 证据、已知限制和非 MVP 清单以 [MVP Release Handoff](./mvp-release-handoff.md) 为准；如果本文和 handoff 冲突，以 handoff 为准。
@@ -8,8 +8,10 @@
 ## 制品
 
 - DMG：`/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/dmg/AI Partner_0.1.0_aarch64.dmg`
-- SHA256：`b1c0ac42f766f1e6c2eb62bebdbe69e9283fe75c2098ba925d060b270207cd8f`
+- 大小：3,059,201 bytes
+- SHA256：`3a24a423cf8371eeaa9a891eca8ec1489aa2d3d2e1b7dac667fcaa0b6e8ac2eb`
 - Release handoff：`docs/mvp-release-handoff.md`
+- 本轮制品包含 MVP 内测本机事件流 HTTP 400 边缘问题修复。
 
 安装前先校验 checksum：
 
@@ -20,7 +22,7 @@ shasum -a 256 "/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/dm
 预期输出以这段开头：
 
 ```text
-b1c0ac42f766f1e6c2eb62bebdbe69e9283fe75c2098ba925d060b270207cd8f
+3a24a423cf8371eeaa9a891eca8ec1489aa2d3d2e1b7dac667fcaa0b6e8ac2eb
 ```
 
 ## 安装步骤

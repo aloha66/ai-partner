@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
+import type { DiscoverRuntimeOptions } from "./discovery.js";
 import {
   debugWorkflowStates,
   defaultConnectTimeoutMs,
@@ -73,7 +74,7 @@ async function runSend(args: ParsedArgs): Promise<void> {
     );
   }
 
-  const descriptor = await discoverRuntime(discoverOptions(args));
+  const descriptor = await discoverRuntime(discoverOptions(args, { skipEndpointCheck: true }));
   const explicitRunId = readOptionalFlag(args, "run-id");
   const event = createWorkflowEvent({
     state,
@@ -86,7 +87,7 @@ async function runSend(args: ParsedArgs): Promise<void> {
 }
 
 async function runSequence(args: ParsedArgs): Promise<void> {
-  const descriptor = await discoverRuntime(discoverOptions(args));
+  const descriptor = await discoverRuntime(discoverOptions(args, { skipEndpointCheck: true }));
   const runId = readOptionalFlag(args, "run-id") ?? createRunId();
   const delayMs = readNumberFlag(args, "delay-ms", 500);
 
@@ -104,12 +105,16 @@ async function runSequence(args: ParsedArgs): Promise<void> {
   }
 }
 
-function discoverOptions(args: ParsedArgs) {
+export function discoverOptions(
+  args: ParsedArgs,
+  overrides: { skipEndpointCheck?: boolean } = {}
+): DiscoverRuntimeOptions {
   return {
     descriptorPath: readOptionalFlag(args, "descriptor"),
     connectTimeoutMs: readNumberFlag(args, "connect-timeout-ms", defaultConnectTimeoutMs),
     maxAgeMs: readNumberFlag(args, "max-age-ms", undefined),
-    futureSkewMs: readNumberFlag(args, "future-skew-ms", undefined)
+    futureSkewMs: readNumberFlag(args, "future-skew-ms", undefined),
+    skipEndpointCheck: overrides.skipEndpointCheck
   };
 }
 

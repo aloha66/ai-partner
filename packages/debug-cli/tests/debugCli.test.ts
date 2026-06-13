@@ -7,6 +7,7 @@ import {
   DebugCliError,
   RUNTIME_DESCRIPTOR_SCHEMA_VERSION,
   assertNoForbiddenFields,
+  assertEndpointReachable,
   createWorkflowEventRequestOptions,
   debugWorkflowStates,
   discoverRuntime,
@@ -17,7 +18,7 @@ import {
   writeDebugSessionRunId,
   validateRuntimeDescriptorFreshness
 } from "../src";
-import { parseArgs } from "../src/cli";
+import { discoverOptions, parseArgs } from "../src/cli";
 
 describe("CLI args", () => {
   it("preserves equals signs in inline flag values", () => {
@@ -27,6 +28,19 @@ describe("CLI args", () => {
     expect(args.positional).toEqual(["waiting"]);
     expect(args.flags.get("message")).toBe("a=b");
     expect(args.flags.get("descriptor")).toBe("/tmp/a=b.json");
+  });
+
+  it("can skip redundant endpoint probes for send-style commands", () => {
+    const args = parseArgs(["send", "waiting", "--descriptor", "/tmp/runtime.json"]);
+
+    expect(discoverOptions(args)).toMatchObject({
+      descriptorPath: "/tmp/runtime.json",
+      skipEndpointCheck: undefined
+    });
+    expect(discoverOptions(args, { skipEndpointCheck: true })).toMatchObject({
+      descriptorPath: "/tmp/runtime.json",
+      skipEndpointCheck: true
+    });
   });
 });
 
@@ -148,6 +162,18 @@ describe("runtime descriptor discovery", () => {
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
+  });
+
+  it("includes unexpected endpoint response bodies in reachability errors", async () => {
+    await expect(
+      assertEndpointReachable(43172, 20, async () => ({
+        status: 400,
+        body: '{"ok":false,"error":"invalid_content_length"}'
+      }))
+    ).rejects.toMatchObject({
+      code: "endpoint_unreachable",
+      message: expect.stringContaining("invalid_content_length")
+    });
   });
 });
 
