@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   ArrowDownToLine,
+  CheckCircle2,
   CirclePause,
   CirclePlay,
   CircleX,
@@ -9,7 +10,9 @@ import {
   MousePointer2,
   Move,
   ScanLine,
-  ShieldCheck
+  ShieldCheck,
+  UserRound,
+  XCircle
 } from "lucide-react";
 import { type AnimationIntent } from "@ai-partner/contracts";
 import {
@@ -23,12 +26,16 @@ import {
   leaveClickThrough,
   listenClickThroughRestored,
   listenPartnerStateChanged,
+  listLocalCompanions,
   moveWindowTo,
   pausePartner,
   registerClickThroughRecovery,
   resumePartner,
+  setSelectedCompanion,
   type StateCommandResult,
-  type SpikeStatus
+  type SpikeStatus,
+  type CompanionCatalog,
+  type LocalCompanion
 } from "./tauriWindow";
 import {
   idlePartnerState,
@@ -44,6 +51,10 @@ import {
 } from "./physicalStateMachine";
 import { PartnerRenderer } from "./spriteRenderer";
 import { defaultAtlasUrl } from "./defaultAtlas";
+import {
+  activeCompanionView,
+  canSwitchCompanion
+} from "./companionSelector";
 import "./styles.css";
 
 type DragState = {
@@ -112,6 +123,11 @@ export function App() {
   const [queuedAnimations, setQueuedAnimations] = useState<AnimationIntent["queued"]>([]);
   const recoveryTimerRef = useRef<number | null>(null);
   const [frameIndex, setFrameIndex] = useState(0);
+  const fallbackAtlasUrl = useMemo(() => defaultAtlasUrl(), []);
+  const [companionCatalog, setCompanionCatalog] = useState<CompanionCatalog | null>(null);
+  const [companionStatus, setCompanionStatus] = useState("scan");
+  const [selectorOpen, setSelectorOpen] = useState(false);
+  const [atlasFailed, setAtlasFailed] = useState(false);
   const [physicalMachine, dispatchPhysical] = useReducer(
     physicalStateMachine,
     initialPhysicalMachineState
@@ -124,14 +140,19 @@ export function App() {
     recover: null
   });
   const stateRevisionRef = useRef(0);
-  const atlasUrl = useMemo(() => defaultAtlasUrl(), []);
   const physicalState = physicalMachine.state;
   const dragging = physicalState === "carried" || physicalState === "struggling";
+  const activeCompanion = useMemo(
+    () => activeCompanionView(atlasFailed ? null : companionCatalog, fallbackAtlasUrl),
+    [atlasFailed, companionCatalog, fallbackAtlasUrl]
+  );
+  const atlasUrl = activeCompanion.atlasUrl;
   const animationIntent = useMemo(
     () => resolvePartnerIntent(partnerState, physicalState, {
-      queued: queuedAnimations
+      queued: queuedAnimations,
+      capabilities: activeCompanion.capabilities
     }),
-    [partnerState, physicalState, queuedAnimations]
+    [partnerState, physicalState, queuedAnimations, activeCompanion.capabilities]
   );
   const stateDisplay = partnerStateDisplay(partnerState);
 
@@ -181,6 +202,28 @@ export function App() {
   }, []);
 
   useEffect(() => clearPhysicalTimers, []);
+
+  useEffect(() => {
+    let disposed = false;
+    listLocalCompanions()
+      .then((catalog) => {
+        if (disposed) {
+          return;
+        }
+        setCompanionCatalog(catalog);
+        setCompanionStatus(catalog.fallbackUsed ? "fallback" : "ready");
+        setAtlasFailed(false);
+      })
+      .catch(() => {
+        if (!disposed) {
+          setCompanionStatus("fail");
+        }
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -393,6 +436,32 @@ export function App() {
     }
   }
 
+  async function switchCompanion(companion: LocalCompanion) {
+    if (!canSwitchCompanion(companion, activeCompanion.id)) {
+      return;
+    }
+
+    setCompanionStatus("set");
+    try {
+      const catalog = await setSelectedCompanion(companion.id);
+      setCompanionCatalog(catalog);
+      setQueuedAnimations([]);
+      setFrameIndex(0);
+      setAtlasFailed(false);
+      setCompanionStatus(catalog.fallbackUsed ? "fallback" : "ready");
+      setSelectorOpen(false);
+    } catch {
+      setCompanionStatus("fail");
+    }
+  }
+
+  function fallBackFromAtlasError() {
+    setAtlasFailed(true);
+    setQueuedAnimations([]);
+    setFrameIndex(0);
+    setCompanionStatus("fallback");
+  }
+
   return (
     <main className="window-spike">
       <section className="companion-zone" aria-label="M0 window spike">
@@ -400,6 +469,7 @@ export function App() {
           intent={animationIntent}
           frameIndex={frameIndex}
           atlasUrl={atlasUrl}
+          onAtlasError={fallBackFromAtlasError}
           dragging={dragging}
           onPointerDown={(event) => void beginManagedDrag(event)}
           onPointerMove={updateManagedDrag}
@@ -413,6 +483,46 @@ export function App() {
         <div className="panel-header">
           <ShieldCheck size={18} aria-hidden />
           <span>M0</span>
+        </div>
+
+        <div className="companion-card" aria-label="companion selector">
+          <button
+            className="companion-trigger"
+            type="button"
+            aria-expanded={selectorOpen}
+            onClick={() => setSelectorOpen((value) => !value)}
+          >
+            <UserRound size={16} aria-hidden />
+            <span>{activeCompanion.name}</span>
+            <strong>{activeCompanion.fallbackUsed || atlasFailed ? "fallback" : companionStatus}</strong>
+          </button>
+          {selectorOpen ? (
+            <div className="companion-popover" role="listbox">
+              {(companionCatalog?.companions ?? []).map((companion) => {
+                const selected = companion.id === activeCompanion.id;
+                return (
+                  <button
+                    key={companion.id}
+                    className={`companion-option ${selected ? "is-selected" : ""}`}
+                    type="button"
+                    disabled={!canSwitchCompanion(companion, activeCompanion.id)}
+                    onClick={() => void switchCompanion(companion)}
+                  >
+                    {companion.valid ? (
+                      <CheckCircle2 size={14} aria-hidden />
+                    ) : (
+                      <XCircle size={14} aria-hidden />
+                    )}
+                    <span>{companion.displayName}</span>
+                    <strong>{selected ? "current" : companion.status}</strong>
+                  </button>
+                );
+              })}
+              {companionCatalog && companionCatalog.companions.length === 0 ? (
+                <div className="companion-empty">No local pets</div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <div className="check-grid">

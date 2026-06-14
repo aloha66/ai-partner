@@ -71,6 +71,20 @@ addCheck(
   Array.isArray(app.security?.capabilities) && app.security.capabilities.includes("m0-window-spike"),
   "packaged app keeps the audited M0 permissions set",
 );
+addCheck(
+  "asset protocol scoped to local pet roots",
+  app.security?.assetProtocol?.enable === true &&
+    JSON.stringify(app.security.assetProtocol.scope) ===
+      JSON.stringify(["$HOME/.petdex/pets/**", "$HOME/.codex/pets/**"]),
+  "runtime atlas URLs are limited to the local Petdex/Codex pets directories",
+);
+addCheck(
+  "CSP limits image sources to bundled/data/asset URLs",
+  typeof app.security?.csp === "string" &&
+    app.security.csp.includes("img-src 'self' data: asset: http://asset.localhost https://asset.localhost") &&
+    !app.security.csp.includes("img-src *"),
+  "packaged renderer can load pet atlases without opening arbitrary remote image sources",
+);
 addCheck("frontend entry exists", existsSync(join(root, "frontend/index.html")), "frontend/index.html is present");
 addCheck(
   "internal DMG builder exists",

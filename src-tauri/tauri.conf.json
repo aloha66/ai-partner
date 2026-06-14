@@ -12,7 +12,15 @@
   "app": {
     "macOSPrivateApi": true,
     "security": {
-      "capabilities": ["m0-window-spike"]
+      "capabilities": ["m0-window-spike"],
+      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' data: asset: http://asset.localhost https://asset.localhost; style-src 'self' 'unsafe-inline'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "$HOME/.petdex/pets/**",
+          "$HOME/.codex/pets/**"
+        ]
+      }
     },
     "windows": [
       {

@@ -2,9 +2,11 @@ use serde::Serialize;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+mod companions;
 mod ingress;
 mod state;
 
+use companions::{get_catalog, select_companion, CompanionCatalog, CompanionStore};
 use state::{
     PartnerStateSnapshot, PartnerStateStore, WorkflowEventWire, PARTNER_STATE_CHANGED_EVENT,
 };
@@ -92,6 +94,19 @@ fn clear_error(app: AppHandle, store: State<'_, PartnerStateStore>) -> PartnerSt
     transition.snapshot
 }
 
+#[tauri::command]
+fn list_local_companions(store: State<'_, CompanionStore>) -> CompanionCatalog {
+    get_catalog(&store)
+}
+
+#[tauri::command]
+fn set_selected_companion(
+    store: State<'_, CompanionStore>,
+    companion_id: String,
+) -> Result<CompanionCatalog, String> {
+    select_companion(&store, companion_id)
+}
+
 fn emit_state_transition(
     app: &AppHandle,
     store: &PartnerStateStore,
@@ -142,7 +157,9 @@ pub fn run() {
             apply_workflow_event,
             pause,
             resume,
-            clear_error
+            clear_error,
+            list_local_companions,
+            set_selected_companion
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
@@ -155,6 +172,7 @@ pub fn run() {
             let store = app.state::<PartnerStateStore>().inner().clone();
             let ingress = ingress::start_local_ingress(app.handle().clone(), store)?;
             app.manage(ingress);
+            app.manage(CompanionStore::from_app(app.handle()));
 
             Ok(())
         });

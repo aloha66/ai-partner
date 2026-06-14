@@ -33,7 +33,7 @@ describe("App drag resolver boundary", () => {
     );
     expect(appSource).toContain("const dragRef = useRef<DragState | null>(null);");
     expect(appSource).toMatch(
-      /const animationIntent = useMemo\([\s\S]*resolvePartnerIntent\(partnerState,\s*physicalState,[\s\S]*queued:\s*queuedAnimations[\s\S]*\[[\s\n]*partnerState,\s*physicalState,\s*queuedAnimations[\s\n]*\][\s\S]*\);/
+      /const animationIntent = useMemo\([\s\S]*resolvePartnerIntent\(partnerState,\s*physicalState,[\s\S]*queued:\s*queuedAnimations[\s\S]*capabilities:\s*activeCompanion\.capabilities[\s\S]*\[[\s\n]*partnerState,\s*physicalState,\s*queuedAnimations,\s*activeCompanion\.capabilities[\s\n]*\][\s\S]*\);/
     );
   });
 
@@ -48,5 +48,18 @@ describe("App drag resolver boundary", () => {
     expect(updateManagedDrag).not.toContain("dispatchPhysical");
     expect(updateManagedDrag).not.toContain("resolvePartnerIntent");
     expect(updateManagedDrag).not.toContain("setQueuedAnimations");
+  });
+
+  it("clears transient animation state when switching companions or falling back", () => {
+    const switchCompanion = functionBody("switchCompanion");
+    const fallBackFromAtlasError = functionBody("fallBackFromAtlasError");
+
+    expect(switchCompanion).toContain("setSelectedCompanion(companion.id)");
+    expect(switchCompanion).toContain("setQueuedAnimations([])");
+    expect(switchCompanion).toContain("setFrameIndex(0)");
+    expect(switchCompanion).toContain("setAtlasFailed(false)");
+    expect(fallBackFromAtlasError).toContain("setAtlasFailed(true)");
+    expect(fallBackFromAtlasError).toContain("setQueuedAnimations([])");
+    expect(fallBackFromAtlasError).toContain("setFrameIndex(0)");
   });
 });

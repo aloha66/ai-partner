@@ -74,6 +74,11 @@ describe("default 520x360 renderer layout sanity", () => {
     expect(styles).not.toMatch(/\.click-through-banner\s*\{[^}]*position:\s*fixed;/s);
   });
 
+  it("opens the companion selector inside the default panel instead of above the window", () => {
+    expect(styles).toMatch(/\.companion-popover\s*\{[^}]*top:\s*calc\(100% \+ 6px\);/s);
+    expect(styles).not.toMatch(/\.companion-popover\s*\{[^}]*bottom:\s*calc\(100% \+ 6px\);/s);
+  });
+
   it("keeps runtime strip labels short enough for the default right panel", () => {
     const runtimeLabels = ["drg", "r1", "fail", "auto"];
     const conservativeTextWidth = runtimeLabels.join("").length * 5;

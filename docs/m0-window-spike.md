@@ -198,6 +198,17 @@ pnpm tauri:dev
 - 本轮未发现 release blocker，未修改产品代码；smoke 后已停止临时 packaged app 实例并卸载 DMG。
 - 结论：MVP DMG readiness smoke 通过；packaged DMG 能安装/启动，默认伴侣窗口可见，本机 endpoint 可发现，waiting/done 可驱动状态，启动和事件发送均不抢焦点。
 
+2026-06-14 local companion selector v0 engineering closeout：
+
+- 本轮 review 当前 diff 后收口本地伴侣选择器 v0：Rust/Tauri 只扫描 `$HOME/.petdex/pets/**` 与 `$HOME/.codex/pets/**` 下含 `pet.json` 的本地 root，不做 marketplace、download、import、delete、edit、search 或复杂管理 UI。
+- 本机真实资产存在并通过 Rust smoke：`.petdex/pets/anya-2`、`.petdex/pets/artoria`、`.codex/pets/anya-2`、`.codex/pets/artoria` 均被发现为 valid companion。修复了同名目录在 `.petdex` / `.codex` 间被去重隐藏的问题，`source:directory` id 现在保持全部 root 可见且可持久化选择。
+- 前端 selector 使用紧凑列表展示 display name、当前选中态、valid/invalid 状态；切换成功后立即替换 atlas/capabilities，并清空 `queuedAnimations`、重置 `frameIndex`。atlas 加载失败会回退内置 default Petdex atlas，避免 blank。
+- 选择持久化由 `companion-settings.json` 记录 `selectedCompanionId`；无效资产选择在 Rust 层拒绝并保留当前 companion，当前选择失效时 catalog 回退 default。
+- asset protocol 已启用且 scope 仅限 `$HOME/.petdex/pets/**` 与 `$HOME/.codex/pets/**`；spritesheet 路径拒绝 absolute/parent escape、symlink、非 file 和非 1536x1872 Petdex atlas，避免开放任意文件。
+- packaged app smoke：`pnpm tauri:build:app` 生成 release `.app` 并从该 `.app` 启动；runtime descriptor discovery 成功，WindowServer 元数据确认 `AI Partner M0` on-screen，启动/重启后前台应用仍为 `Codex`；`pnpm debug:send running/reading/waiting/done` 均被 packaged endpoint 接受。
+- packaged selector 自动点击未计为完整通过：当前 macOS 自动化仍不能稳定把 CGEvent/System Events 坐标点击交给透明 accessory Tauri WebView，AX 也不暴露 WebView 控件树；`screencapture -R`/旧 CGDisplay 区域截图路径不可用。本轮因此以 Rust catalog/select tests、frontend selector tests、asset protocol preflight、packaged endpoint/WindowServer/focus 元数据作为证据，并保留真实手点 selector 作为后续 manual smoke 项。
+- packaged smoke 过程中发现 selector popover 原本向上展开，默认窗口下会跑出顶部；已改为向下展开并补 layout sanity test。
+
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
 
 ## M1 Rust State Bridge 进展

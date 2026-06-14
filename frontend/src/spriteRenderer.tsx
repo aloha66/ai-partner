@@ -54,6 +54,7 @@ export interface SpriteRendererProps {
   intent: AnimationIntent;
   frameIndex: number;
   atlasUrl: string;
+  onAtlasError?: () => void;
 }
 
 export interface PartnerRendererProps extends SpriteRendererProps {
@@ -138,7 +139,7 @@ export function spriteRenderModelForIntent(
   };
 }
 
-export function SpriteRenderer({ intent, frameIndex, atlasUrl }: SpriteRendererProps) {
+export function SpriteRenderer({ intent, frameIndex, atlasUrl, onAtlasError }: SpriteRendererProps) {
   const model = spriteRenderModelForIntent(intent, frameIndex, atlasUrl);
 
   return (
@@ -156,6 +157,7 @@ export function SpriteRenderer({ intent, frameIndex, atlasUrl }: SpriteRendererP
         className="sprite-atlas"
         src={model.atlasUrl}
         style={model.atlasStyle}
+        onError={onAtlasError}
         alt=""
         draggable={false}
       />
@@ -167,6 +169,7 @@ export function PartnerRenderer({
   intent,
   frameIndex,
   atlasUrl,
+  onAtlasError,
   dragging,
   onPointerDown,
   onPointerMove,
@@ -194,7 +197,12 @@ export function PartnerRenderer({
         onPointerCancel={onPointerCancel}
         onLostPointerCapture={onLostPointerCapture}
       >
-        <SpriteRenderer intent={intent} frameIndex={frameIndex} atlasUrl={atlasUrl} />
+        <SpriteRenderer
+          intent={intent}
+          frameIndex={frameIndex}
+          atlasUrl={atlasUrl}
+          onAtlasError={onAtlasError}
+        />
       </div>
     </>
   );
