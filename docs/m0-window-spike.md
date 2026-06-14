@@ -209,6 +209,17 @@ pnpm tauri:dev
 - packaged selector 自动点击未计为完整通过：当前 macOS 自动化仍不能稳定把 CGEvent/System Events 坐标点击交给透明 accessory Tauri WebView，AX 也不暴露 WebView 控件树；`screencapture -R`/旧 CGDisplay 区域截图路径不可用。本轮因此以 Rust catalog/select tests、frontend selector tests、asset protocol preflight、packaged endpoint/WindowServer/focus 元数据作为证据，并保留真实手点 selector 作为后续 manual smoke 项。
 - packaged smoke 过程中发现 selector popover 原本向上展开，默认窗口下会跑出顶部；已改为向下展开并补 layout sanity test。
 
+2026-06-14 local companion selector v0 manual hand-click smoke：
+
+- 起点：HEAD `97f117b feat: add local companion selector`；初始工作区只有未跟踪 `.agents/`，未纳入 git。
+- 未使用 `pnpm tauri:dev`。已存在 release `.app`，本轮直接启动 `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/macos/AI Partner.app`；启动后 `pnpm debug:discover` 发现 packaged endpoint `http://127.0.0.1:57083/events`，`appInstanceId=app_20260614T093051Z_31386_e2a28f905727c030`。sandbox 下 localhost 访问仍会返回 `EPERM`，提权后本机 endpoint discovery 通过。
+- 真实鼠标手点 selector 后确认本地 companion 列表可用；`anya-2` 与 `artoria` 均可作为 valid 本地伴侣选中，当前选中态随选择更新。手动切到 `artoria` 后设置文件写入 `/Users/aloha66/Library/Application Support/com.ailoha.aipartner/companion-settings.json`，内容为 `selectedCompanionId=codex:artoria`，sprite 立即变化且未出现 blank/default fallback。
+- 在 `artoria` 选中态下依次发送 `pnpm debug:send running`、`pnpm debug:send reading`、`pnpm debug:send waiting`、`pnpm debug:send done`，均被 packaged endpoint 接受；`done` 正确复用 `waiting` 的 `run_id=run_debug_2026-06-14T10:01:04.438Z_3ab91f3c-31f2-4529-8e67-1864567d1171`。状态驱动期间 sprite/bubble 保持正常。
+- 退出 `artoria` 实例并重启 packaged app 后，`pnpm debug:discover` 发现新 endpoint `http://127.0.0.1:63759/events`，`appInstanceId=app_20260614T100151Z_40825_ba4083b583413985`；设置文件仍为 `selectedCompanionId=codex:artoria`，重启持久化通过。
+- 真实鼠标手点 selector 切回 `anya-2` 后，设置文件更新为 `selectedCompanionId=codex:anya-2`，sprite 立即变化且未出现 blank/default fallback。再次退出并重启 packaged app 后，`pnpm debug:discover` 发现 endpoint `http://127.0.0.1:64389/events`，`appInstanceId=app_20260614T100332Z_43661_5ad5240edde6523d`；设置文件仍为 `selectedCompanionId=codex:anya-2`，重启持久化通过。
+- `screencapture -x /private/tmp/ai-partner-selector-smoke-final.png` 在普通 sandbox 下仍失败为 `could not create image from display`；提权截图被安全审查拒绝，原因是可能捕获无关屏幕内容。本轮不绕过截图限制，视觉证据以真实手点观察结合设置文件、endpoint 和跨重启持久化结果记录。
+- 本轮未发现产品问题，未修改产品代码，未提交本机宠物素材或 `.agents/`。
+
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
 
 ## M1 Rust State Bridge 进展
