@@ -17,8 +17,9 @@
   --t8-bubble-label-line-height: 10px;
   --t8-bubble-message-font-size: 13px;
   --t8-bubble-message-line-height: 16px;
-  --t8-sprite-width: 168px;
-  --t8-sprite-height: 182px;
+  --t8-sprite-width: 173px;
+  --t8-sprite-height: 187px;
+  --t8-sprite-bottom-safe-area: 24px;
   --t8-click-banner-width: 168px;
   --t8-click-banner-padding: 5px;
   --t8-click-banner-border: 1px;
@@ -66,8 +67,10 @@ button {
 }
 
 .companion-zone {
+  box-sizing: border-box;
   min-width: 0;
   height: 100%;
+  padding-bottom: var(--t8-sprite-bottom-safe-area);
   display: grid;
   align-content: end;
   justify-items: center;

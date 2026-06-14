@@ -7,14 +7,20 @@ import {
 import {
   legacyAnimationByPetdexRow,
   PETDEX_COLUMNS,
-  PETDEX_ATLAS_HEIGHT,
-  PETDEX_ATLAS_WIDTH,
+  PETDEX_CELL_HEIGHT,
+  PETDEX_CELL_WIDTH,
+  PETDEX_ROWS,
   petdexFrameCounts,
   type PetdexRow
 } from "@ai-partner/assets/petdex";
 import { spriteFrame, type SpriteFrame } from "./spriteProbe";
 
-export const DEFAULT_SPRITE_SCALE = 7 / 8;
+export const SPRITE_RENDER_HEIGHT = 187;
+export const SPRITE_RENDER_WIDTH = Math.round(
+  (PETDEX_CELL_WIDTH / PETDEX_CELL_HEIGHT) * SPRITE_RENDER_HEIGHT
+);
+export const SPRITE_RENDER_SCALE_X = SPRITE_RENDER_WIDTH / PETDEX_CELL_WIDTH;
+export const SPRITE_RENDER_SCALE_Y = SPRITE_RENDER_HEIGHT / PETDEX_CELL_HEIGHT;
 
 const canonicalPetdexRows = {
   "workflow.idle": "idle",
@@ -88,10 +94,6 @@ export function normalizeSpriteColumnForRow(row: PetdexRow, frameIndex: number):
   return ((Math.trunc(frameIndex) % frameCount) + frameCount) % frameCount;
 }
 
-function scaledSpritePixels(value: number): number {
-  return value * DEFAULT_SPRITE_SCALE;
-}
-
 function atlasKind(atlasUrl: string): SpriteRenderModel["atlasKind"] {
   if (atlasUrl.startsWith("asset:") || atlasUrl.includes("://asset.localhost/")) {
     return "asset";
@@ -109,8 +111,8 @@ export function spriteRenderModelForIntent(
 ): SpriteRenderModel {
   const row = petdexRowForAnimation(intent.body.animation);
   const frame = spriteFrame(row, normalizeSpriteColumnForRow(row, frameIndex));
-  const width = scaledSpritePixels(frame.width);
-  const height = scaledSpritePixels(frame.height);
+  const width = SPRITE_RENDER_WIDTH;
+  const height = SPRITE_RENDER_HEIGHT;
   const procedural = [...intent.body.procedural].sort();
   const className = [
     "sprite-frame",
@@ -125,8 +127,8 @@ export function spriteRenderModelForIntent(
     atlasKind: atlasKind(atlasUrl),
     atlasUrl,
     atlasStyle: {
-      width: scaledSpritePixels(PETDEX_ATLAS_WIDTH),
-      height: scaledSpritePixels(PETDEX_ATLAS_HEIGHT),
+      width: SPRITE_RENDER_WIDTH * PETDEX_COLUMNS,
+      height: SPRITE_RENDER_HEIGHT * PETDEX_ROWS,
       transform: `translate3d(-${frame.columnIndex * width}px, -${frame.rowIndex * height}px, 0)`
     },
     className,
@@ -147,7 +149,8 @@ export function SpriteRenderer({ intent, frameIndex, atlasUrl, onAtlasError }: S
       className={model.className}
       data-animation={model.animation}
       data-loop={model.loop ? "true" : "false"}
-      data-sprite-scale={DEFAULT_SPRITE_SCALE}
+      data-sprite-scale-x={SPRITE_RENDER_SCALE_X}
+      data-sprite-scale-y={SPRITE_RENDER_SCALE_Y}
       data-sprite-column={model.frame.columnIndex}
       data-sprite-row={model.row}
       data-atlas-kind={model.atlasKind}
