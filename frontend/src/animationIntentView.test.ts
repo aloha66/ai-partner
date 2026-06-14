@@ -28,9 +28,15 @@ describe("animation intent view", () => {
   it("resolves workflow snapshots with default Petdex capabilities", () => {
     const reading = resolvePartnerIntent(snapshot("reading"), "normal");
     const waitingCarried = resolvePartnerIntent(snapshot("waiting", "等待确认"), "carried");
+    const waitingDraggedRight = resolvePartnerIntent(snapshot("waiting", "等待确认"), "struggling", {
+      physicalContext: {
+        horizontalDirection: "right"
+      }
+    });
 
     expect(reading.body.animation).toBe("legacy.review");
     expect(waitingCarried.body.animation).toBe("legacy.idle");
+    expect(waitingDraggedRight.body.animation).toBe("legacy.running-right");
     expect(waitingCarried.bubble).toEqual({
       state: "waiting",
       text: "等待确认",

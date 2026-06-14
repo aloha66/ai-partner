@@ -13,11 +13,12 @@ import {
   type PartnerCapabilities,
   mergeWithDefaultFallbacks
 } from "./capabilities";
-import { type PhysicalState } from "./physical";
+import { type PhysicalAnimationContext, type PhysicalState } from "./physical";
 
 export interface ResolveAnimationOptions {
   now?: Date;
   queued?: QueuedAnimationIntent[];
+  physicalContext?: PhysicalAnimationContext;
 }
 
 const DONE_QUEUE_TTL_MS = 5_000;
@@ -80,7 +81,8 @@ export function resolveAnimation(
     physicalState === "normal" || physicalTarget === undefined ? workflowTarget : physicalTarget;
   const body = bodyIntentFor(bodyTarget, mergedCapabilities, {
     fallbackProcedural: physicalTarget ? proceduralByPhysical[physicalState] ?? [] : [],
-    fallbackLoop: physicalTarget ? loopByPhysical[physicalState] ?? true : true
+    fallbackLoop: physicalTarget ? loopByPhysical[physicalState] ?? true : true,
+    physicalContext: options.physicalContext
   });
   const queued =
     snapshot.workflowState === "done" && physicalState !== "normal"
@@ -121,9 +123,13 @@ function bubbleForSnapshot(snapshot: PartnerStateSnapshot): BubbleIntent | null 
 function bodyIntentFor(
   requested: AnimationRef,
   capabilities: PartnerCapabilities,
-  fallback: { fallbackProcedural: ProceduralEffect[]; fallbackLoop: boolean }
+  fallback: {
+    fallbackProcedural: ProceduralEffect[];
+    fallbackLoop: boolean;
+    physicalContext?: PhysicalAnimationContext;
+  }
 ): BodyAnimationIntent {
-  const animation = selectAnimation(requested, capabilities);
+  const animation = selectAnimation(requested, capabilities, fallback.physicalContext);
   const timeline = capabilities.animations[animation];
   const procedural = new Set<ProceduralEffect>([
     ...(timeline?.procedural ?? []),
@@ -139,17 +145,59 @@ function bodyIntentFor(
 
 function selectAnimation(
   requested: AnimationRef,
-  capabilities: PartnerCapabilities
+  capabilities: PartnerCapabilities,
+  physicalContext?: PhysicalAnimationContext
 ): AnimationRef {
   if (capabilities.animations[requested]) {
     return requested;
   }
-  for (const fallback of capabilities.fallbacks[requested] ?? []) {
+  for (const fallback of orderedFallbacks(
+    requested,
+    capabilities.fallbacks[requested] ?? [],
+    physicalContext
+  )) {
     if (capabilities.animations[fallback]) {
       return fallback;
     }
   }
   return capabilities.animations["legacy.idle"] ? "legacy.idle" : requested;
+}
+
+function orderedFallbacks(
+  requested: AnimationRef,
+  fallbacks: AnimationRef[],
+  physicalContext?: PhysicalAnimationContext
+): AnimationRef[] {
+  const direction = physicalContext?.horizontalDirection;
+  if (requested !== "physical.struggling" || direction === undefined) {
+    return fallbacks;
+  }
+
+  const preferred: AnimationRef =
+    direction === "right" ? "legacy.running-right" : "legacy.running-left";
+  const alternate: AnimationRef =
+    direction === "right" ? "legacy.running-left" : "legacy.running-right";
+  const firstDirectionalIndex = Math.min(
+    indexOrInfinity(fallbacks, "legacy.running-left"),
+    indexOrInfinity(fallbacks, "legacy.running-right")
+  );
+
+  if (!Number.isFinite(firstDirectionalIndex) || !fallbacks.includes(preferred)) {
+    return fallbacks;
+  }
+
+  const directional = new Set<AnimationRef>(["legacy.running-left", "legacy.running-right"]);
+  return [
+    ...fallbacks.slice(0, firstDirectionalIndex).filter((fallback) => !directional.has(fallback)),
+    preferred,
+    ...(fallbacks.includes(alternate) ? [alternate] : []),
+    ...fallbacks.slice(firstDirectionalIndex).filter((fallback) => !directional.has(fallback))
+  ];
+}
+
+function indexOrInfinity(values: AnimationRef[], value: AnimationRef): number {
+  const index = values.indexOf(value);
+  return index === -1 ? Number.POSITIVE_INFINITY : index;
 }
 
 function queueDoneAnimation(

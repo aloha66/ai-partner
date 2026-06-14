@@ -15,6 +15,7 @@ import {
   XCircle
 } from "lucide-react";
 import { type AnimationIntent } from "@ai-partner/contracts";
+import { type PhysicalHorizontalDirection } from "@ai-partner/resolver";
 import {
   applyM0WindowDefaults,
   clearPartnerError,
@@ -68,6 +69,8 @@ type DragState = {
 };
 
 type PhysicalTimerName = "struggle" | "land" | "recover";
+
+const DRAG_DIRECTION_THRESHOLD_PX = 1;
 
 const checks = [
   ["transparent", "透明"],
@@ -132,6 +135,8 @@ export function App() {
     physicalStateMachine,
     initialPhysicalMachineState
   );
+  const [dragDirection, setDragDirection] = useState<PhysicalHorizontalDirection | undefined>();
+  const dragDirectionRef = useRef<PhysicalHorizontalDirection | undefined>(undefined);
   const dragRef = useRef<DragState | null>(null);
   const dragAttemptRef = useRef(0);
   const physicalTimersRef = useRef<Record<PhysicalTimerName, number | null>>({
@@ -150,9 +155,12 @@ export function App() {
   const animationIntent = useMemo(
     () => resolvePartnerIntent(partnerState, physicalState, {
       queued: queuedAnimations,
-      capabilities: activeCompanion.capabilities
+      capabilities: activeCompanion.capabilities,
+      physicalContext: {
+        horizontalDirection: dragDirection
+      }
     }),
-    [partnerState, physicalState, queuedAnimations, activeCompanion.capabilities]
+    [partnerState, physicalState, queuedAnimations, activeCompanion.capabilities, dragDirection]
   );
   const stateDisplay = partnerStateDisplay(partnerState);
 
@@ -296,6 +304,7 @@ export function App() {
         latestY: position.y,
         raf: null
       };
+      updateDragDirection(undefined);
       clearPhysicalTimers();
       dispatchPhysical({ type: "drag_start" });
       schedulePhysicalEvent("struggle", { type: "struggle" }, 450);
@@ -323,8 +332,14 @@ export function App() {
         if (dragRef.current !== active) {
           return;
         }
-        active.latestX = active.windowStartX + cursor.x - active.cursorStartX;
-        active.latestY = active.windowStartY + cursor.y - active.cursorStartY;
+        const nextX = active.windowStartX + cursor.x - active.cursorStartX;
+        const nextY = active.windowStartY + cursor.y - active.cursorStartY;
+        const deltaX = nextX - active.latestX;
+        active.latestX = nextX;
+        active.latestY = nextY;
+        if (Math.abs(deltaX) >= DRAG_DIRECTION_THRESHOLD_PX) {
+          updateDragDirection(deltaX > 0 ? "right" : "left");
+        }
         moveWindowTo(active.latestX, active.latestY).catch(() => undefined);
       });
     }
@@ -337,6 +352,7 @@ export function App() {
     }
     dragAttemptRef.current += 1;
     dragRef.current = null;
+    updateDragDirection(undefined);
     clearPhysicalTimer("struggle");
     if (!drag) {
       dispatchPhysical({ type: "reset", reason: "lost_capture" });
@@ -354,8 +370,17 @@ export function App() {
     }
     dragAttemptRef.current += 1;
     dragRef.current = null;
+    updateDragDirection(undefined);
     clearPhysicalTimers();
     dispatchPhysical({ type: "reset", reason });
+  }
+
+  function updateDragDirection(direction: PhysicalHorizontalDirection | undefined) {
+    if (dragDirectionRef.current === direction) {
+      return;
+    }
+    dragDirectionRef.current = direction;
+    setDragDirection(direction);
   }
 
   function resetLostCaptureIfDragging() {

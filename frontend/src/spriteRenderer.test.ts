@@ -140,11 +140,15 @@ describe("sprite renderer model", () => {
   });
 
   it("keeps physical procedural effects in DOM-ready classes", () => {
-    const intent = resolvePartnerIntent(snapshot("waiting", "等待确认"), "struggling");
+    const intent = resolvePartnerIntent(snapshot("waiting", "等待确认"), "struggling", {
+      physicalContext: {
+        horizontalDirection: "right"
+      }
+    });
     const model = spriteRenderModelForIntent(intent, 1, "probe-atlas");
 
-    expect(model.animation).toBe("legacy.running-left");
-    expect(model.row).toBe("running-left");
+    expect(model.animation).toBe("legacy.running-right");
+    expect(model.row).toBe("running-right");
     expect(model.procedural).toEqual(["shake"]);
     expect(model.className).toBe("sprite-frame is-looping effect-shake");
   });

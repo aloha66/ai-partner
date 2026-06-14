@@ -365,11 +365,20 @@ describe("Full Petdex renderer compatibility smoke", () => {
       for (const [physicalState, expectedRow] of Object.entries(physicalRows)) {
         const intent = resolvePartnerIntent(
           snapshot(workflowState, `${workflowState} priority smoke`),
-          physicalState as keyof typeof physicalRows
+          physicalState as keyof typeof physicalRows,
+          physicalState === "struggling"
+            ? {
+                physicalContext: {
+                  horizontalDirection: "right"
+                }
+              }
+            : {}
         );
         const model = spriteRenderModelForIntent(intent, 0, "atlas");
 
-        expect(model.row).toBe(expectedRow);
+        expect(model.row).toBe(
+          physicalState === "struggling" ? "running-right" : expectedRow
+        );
         expect(intent.bubble).toEqual({
           state: workflowState,
           text: `${workflowState} priority smoke`,
