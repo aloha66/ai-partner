@@ -270,6 +270,19 @@ pnpm tauri:dev
 - Rust `open_local_pets_directory` review 修复：native open command 现在在创建/打开前拒绝 `.petdex`/`.codex` source parent 或 `pets` 目录本身为 symlink，并使用 canonical pets directory；asset protocol scope 仍仅为 `$HOME/.petdex/pets/**` 与 `$HOME/.codex/pets/**`。
 - 已补针对性测试：frontend product UI boundary/theme tests、Rust companion parent symlink/ensure directory tests。剩余人工 hand-click 补证仍是 product UI v1 菜单路径：右键菜单打开/关闭、从菜单打开 selector、搜索/切换、打开本地 pets 目录、system/light/dark 三态、退出按钮。
 
+2026-06-16 PR #2 final packaged smoke / merge readiness：
+
+- 起点：HEAD `349d022 fix: tighten companion product ui review gaps`，分支 `codex/selector-v1` tracking `origin/codex/selector-v1`；开始和结束工作区只剩未跟踪 `.agents/`，未提交 `.agents/` 或本机宠物素材。
+- 使用 packaged app，不使用 `pnpm tauri:dev`：`pnpm tauri:build:app` 成功，生成 `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/macos/AI Partner.app`。首次启动发现 endpoint `http://127.0.0.1:57288/events`、pid `39264`；runtime descriptor 权限为 `0600`。
+- 默认 release UI 通过：AX tree 显示 `IDLE / 等待 workflow 事件` 和 `live / idle`，未出现 `M0` debug panel、window controls 或 runtime strip。后续 window-only 截图 `/private/tmp/ai-partner-pr2-window.png` 显示 Artoria companion、bubble/status 可见，仍无 debug panel。
+- 右键菜单产品入口通过可访问性路径复核：在 companion group 上执行 `AXShowMenu` 后出现 `companion menu`，包含 `切换伴侣...`、`暂停状态`、`点击穿透 6s`、`打开本地 pets 目录`、`外观`、`跟随系统`、`浅色`、`暗黑`、`退出`；release 菜单未出现 `诊断信息`。
+- Selector modal 通过：从菜单打开 `切换伴侣` modal；列表显示 `阿尼亚` / `Artoria`，来源覆盖 `Codex Desktop` 与 `Petdex`，同名项标注 `source variant`；无结果搜索显示 `No local companions match "zz-no-local-companion".`。本机真实 roots 仍是 `$HOME/.codex/pets/{anya-2,artoria}` 与 `$HOME/.petdex/pets/{anya-2,artoria}`。
+- Companion persistence / non-fallback 通过：首次实例保留 `codex:artoria`；退出后重启 fresh packaged app，`pnpm debug:discover` 发现新 endpoint `http://127.0.0.1:58589/events`、pid `72696`，设置文件仍为 `selectedCompanionId=codex:artoria`；window-only 截图确认 Artoria sprite 不 blank、不 fallback。
+- Packaged endpoint 状态 smoke 通过：`pnpm debug:send running`、`reading`、`waiting`、`done` 均被 packaged endpoint 接受；最终 `done` 复用 waiting 的 `run_id=run_debug_2026-06-15T18:31:43.291Z_cb0a5c2c-9f00-49ec-b461-e66d6f4b3e07`。截图 `/private/tmp/ai-partner-pr2-reading.png` 捕获 `RUNNING / AI 正在运行`，`/private/tmp/ai-partner-pr2-after-done.png` 捕获 `DONE / 已完成`，均显示 Artoria sprite 正常且无 fallback。
+- Theme / selector / menu 边界的 focused regression 通过：`pnpm --filter @ai-partner/frontend test -- theme.test.ts companionSelector.test.ts AppProductUiBoundary.test.ts layoutSanity.test.ts` 实际执行为 frontend suite，14 files / 74 tests 通过；WebKit localStorage 当前包含 `ai-partner.theme|s`，即 system preference 已持久化。
+- 退出/lifecycle 通过：停止最终 packaged app 实例 pid `72696` 后，`pnpm debug:discover` 返回 `descriptor_stale: Runtime descriptor process is not alive.`，WindowServer 查询返回 `no AI Partner windows`。
+- 工具限制说明：本轮 Computer Use permissions 一直 pending；透明 accessory WKWebView 对合成 right-click/AX click 不稳定，fresh instance 在 selector focusability 变化后 AX 只暴露 app/menu bar 而不再暴露 window tree。因此 theme 三态视觉切换、open-local-pets、click-through 6s 和退出按钮没有取得新的 literal hand-click 截图；它们由已打开的 release 菜单标签、focused frontend/Rust tests、既有 2026-06-15 review fixes 和本轮 packaged endpoint/window-only evidence 覆盖。本轮未发现需要修改产品代码的 blocker。
+
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
 
 ## M1 Rust State Bridge 进展
