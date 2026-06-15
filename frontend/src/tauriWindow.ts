@@ -1,6 +1,7 @@
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { PartnerStateSnapshot } from "@ai-partner/contracts";
+import type { PartnerCapabilities } from "@ai-partner/resolver";
 import {
   isRegistered,
   register,
@@ -40,12 +41,49 @@ export interface StateCommandResult {
   error?: string;
 }
 
+export interface CompanionCatalog {
+  companions: LocalCompanion[];
+  selectedCompanionId: string;
+  selectedCompanion: LocalCompanion;
+  fallbackUsed: boolean;
+  status: string;
+}
+
+export interface LocalCompanion {
+  id: string;
+  partnerId: string;
+  displayName: string;
+  description?: string;
+  rootPath?: string;
+  spritesheetPath?: string;
+  atlasUrl?: string;
+  capabilities: PartnerCapabilities;
+  valid: boolean;
+  status: "valid" | "invalid" | "fallback" | string;
+  errors: string[];
+  source: string;
+}
+
+export interface RuntimeCompanion extends LocalCompanion {
+  runtimeAtlasUrl?: string;
+}
+
 export async function getSpikeStatus(): Promise<SpikeStatus> {
   return invoke<SpikeStatus>("m0_window_spike_status");
 }
 
 export async function getCurrentState(): Promise<PartnerStateSnapshot> {
   return invoke<PartnerStateSnapshot>("get_current_state");
+}
+
+export async function listLocalCompanions(): Promise<CompanionCatalog> {
+  return withRuntimeAtlasUrls(await invoke<CompanionCatalog>("list_local_companions"));
+}
+
+export async function setSelectedCompanion(companionId: string): Promise<CompanionCatalog> {
+  return withRuntimeAtlasUrls(
+    await invoke<CompanionCatalog>("set_selected_companion", { companionId })
+  );
 }
 
 export async function listenPartnerStateChanged(
@@ -97,6 +135,26 @@ async function invokeStateCommandWithFallback(command: string): Promise<StateCom
       error: String(error)
     };
   }
+}
+
+function withRuntimeAtlasUrls(catalog: CompanionCatalog): CompanionCatalog {
+  const companions = catalog.companions.map(withRuntimeAtlasUrl);
+  const selectedCompanion = withRuntimeAtlasUrl(catalog.selectedCompanion);
+
+  return {
+    ...catalog,
+    companions,
+    selectedCompanion
+  };
+}
+
+function withRuntimeAtlasUrl(companion: LocalCompanion): RuntimeCompanion {
+  return {
+    ...companion,
+    runtimeAtlasUrl:
+      companion.atlasUrl ??
+      (companion.spritesheetPath ? convertFileSrc(companion.spritesheetPath) : undefined)
+  };
 }
 
 export async function moveWindowTo(x: number, y: number): Promise<void> {

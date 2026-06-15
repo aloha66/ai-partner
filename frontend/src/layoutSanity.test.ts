@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import {
+  SPRITE_RENDER_HEIGHT,
+  SPRITE_RENDER_WIDTH
+} from "./spriteRenderer";
 
 const stylesPath = fileURLToPath(new URL("./styles.css", import.meta.url));
 const styles = readFileSync(stylesPath, "utf8");
@@ -23,6 +27,7 @@ const layout = {
   panelBorder: cssPxVar("t8-panel-border"),
   companionMinWidth: cssPxVar("t8-companion-min-width"),
   companionGap: cssPxVar("t8-companion-gap"),
+  spriteBottomSafeArea: cssPxVar("t8-sprite-bottom-safe-area"),
   bubbleMaxWidth: cssPxVar("t8-bubble-max-width"),
   bubbleMaxHeight: cssPxVar("t8-bubble-max-height"),
   bubblePaddingY: cssPxVar("t8-bubble-padding-y"),
@@ -44,13 +49,21 @@ describe("default 520x360 renderer layout sanity", () => {
     const contentHeight = layout.windowHeight - layout.padding * 2;
     const companionWidth = contentWidth - layout.panelWidth - layout.gap;
     const companionStackHeight =
-      layout.bubbleMaxHeight + layout.companionGap + layout.spriteHeight;
+      layout.bubbleMaxHeight +
+      layout.companionGap +
+      layout.spriteHeight +
+      layout.spriteBottomSafeArea;
 
     expect(companionWidth).toBeGreaterThanOrEqual(layout.companionMinWidth);
     expect(layout.spriteWidth).toBeLessThanOrEqual(companionWidth);
     expect(layout.bubbleMaxWidth).toBeLessThanOrEqual(companionWidth);
     expect(companionStackHeight).toBeLessThanOrEqual(contentHeight);
     expect(layout.panelWidth).toBeLessThan(contentWidth);
+  });
+
+  it("keeps the partner hitbox aligned to the renderer footprint", () => {
+    expect(layout.spriteWidth).toBe(SPRITE_RENDER_WIDTH);
+    expect(layout.spriteHeight).toBe(SPRITE_RENDER_HEIGHT);
   });
 
   it("keeps one-line bubble content inside its border-box overlay", () => {
@@ -72,6 +85,11 @@ describe("default 520x360 renderer layout sanity", () => {
     expect(bannerOuterHeight + layout.padding).toBeLessThan(layout.windowHeight);
     expect(styles).toMatch(/\.click-through-banner\s*\{[^}]*width:\s*100%;/s);
     expect(styles).not.toMatch(/\.click-through-banner\s*\{[^}]*position:\s*fixed;/s);
+  });
+
+  it("opens the companion selector inside the default panel instead of above the window", () => {
+    expect(styles).toMatch(/\.companion-popover\s*\{[^}]*top:\s*calc\(100% \+ 6px\);/s);
+    expect(styles).not.toMatch(/\.companion-popover\s*\{[^}]*bottom:\s*calc\(100% \+ 6px\);/s);
   });
 
   it("keeps runtime strip labels short enough for the default right panel", () => {

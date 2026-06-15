@@ -25,7 +25,8 @@ import {
 import { describe, expect, it } from "vitest";
 import { resolvePartnerIntent } from "./animationIntentView";
 import {
-  DEFAULT_SPRITE_SCALE,
+  SPRITE_RENDER_HEIGHT,
+  SPRITE_RENDER_WIDTH,
   normalizeSpriteColumnForRow,
   spriteRenderModelForIntent
 } from "./spriteRenderer";
@@ -294,10 +295,11 @@ describe("Full Petdex renderer compatibility smoke", () => {
   });
 
   it("keeps Retina sprite clipping on integer CSS and physical pixels", () => {
-    expect(DEFAULT_SPRITE_SCALE).toBe(7 / 8);
     expect(styles).toMatch(/\.sprite-frame\s*\{[^}]*overflow:\s*hidden;/s);
     expect(styles).toMatch(/\.sprite-frame\s*\{[^}]*image-rendering:\s*pixelated;/s);
     expect(styles).toMatch(/\.sprite-atlas\s*\{[^}]*image-rendering:\s*pixelated;/s);
+    expect(SPRITE_RENDER_WIDTH).toBe(173);
+    expect(SPRITE_RENDER_HEIGHT).toBe(187);
 
     for (const row of petdexRows) {
       const model = spriteRenderModelForIntent(
@@ -312,10 +314,11 @@ describe("Full Petdex renderer compatibility smoke", () => {
       const offsetX = model.frame.columnIndex * cssWidth;
       const offsetY = model.frame.rowIndex * cssHeight;
 
-      expect(cssWidth).toBe(PETDEX_CELL_WIDTH * DEFAULT_SPRITE_SCALE);
-      expect(cssHeight).toBe(PETDEX_CELL_HEIGHT * DEFAULT_SPRITE_SCALE);
-      expect(atlasWidth).toBe(PETDEX_ATLAS_WIDTH * DEFAULT_SPRITE_SCALE);
-      expect(atlasHeight).toBe(PETDEX_ATLAS_HEIGHT * DEFAULT_SPRITE_SCALE);
+      expect(cssWidth).toBe(SPRITE_RENDER_WIDTH);
+      expect(cssHeight).toBe(SPRITE_RENDER_HEIGHT);
+      expect(atlasWidth).toBe(SPRITE_RENDER_WIDTH * PETDEX_COLUMNS);
+      expect(atlasHeight).toBe(SPRITE_RENDER_HEIGHT * petdexRows.length);
+      expect(PETDEX_ATLAS_WIDTH / atlasWidth).toBeCloseTo(PETDEX_ATLAS_HEIGHT / atlasHeight);
       expect(offsetX + cssWidth).toBeLessThanOrEqual(atlasWidth);
       expect(offsetY + cssHeight).toBeLessThanOrEqual(atlasHeight);
 
@@ -362,11 +365,20 @@ describe("Full Petdex renderer compatibility smoke", () => {
       for (const [physicalState, expectedRow] of Object.entries(physicalRows)) {
         const intent = resolvePartnerIntent(
           snapshot(workflowState, `${workflowState} priority smoke`),
-          physicalState as keyof typeof physicalRows
+          physicalState as keyof typeof physicalRows,
+          physicalState === "struggling"
+            ? {
+                physicalContext: {
+                  horizontalDirection: "right"
+                }
+              }
+            : {}
         );
         const model = spriteRenderModelForIntent(intent, 0, "atlas");
 
-        expect(model.row).toBe(expectedRow);
+        expect(model.row).toBe(
+          physicalState === "struggling" ? "running-right" : expectedRow
+        );
         expect(intent.bubble).toEqual({
           state: workflowState,
           text: `${workflowState} priority smoke`,

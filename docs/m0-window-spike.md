@@ -198,6 +198,55 @@ pnpm tauri:dev
 - 本轮未发现 release blocker，未修改产品代码；smoke 后已停止临时 packaged app 实例并卸载 DMG。
 - 结论：MVP DMG readiness smoke 通过；packaged DMG 能安装/启动，默认伴侣窗口可见，本机 endpoint 可发现，waiting/done 可驱动状态，启动和事件发送均不抢焦点。
 
+2026-06-14 local companion selector v0 engineering closeout：
+
+- 本轮 review 当前 diff 后收口本地伴侣选择器 v0：Rust/Tauri 只扫描 `$HOME/.petdex/pets/**` 与 `$HOME/.codex/pets/**` 下含 `pet.json` 的本地 root，不做 marketplace、download、import、delete、edit、search 或复杂管理 UI。
+- 本机真实资产存在并通过 Rust smoke：`.petdex/pets/anya-2`、`.petdex/pets/artoria`、`.codex/pets/anya-2`、`.codex/pets/artoria` 均被发现为 valid companion。修复了同名目录在 `.petdex` / `.codex` 间被去重隐藏的问题，`source:directory` id 现在保持全部 root 可见且可持久化选择。
+- 前端 selector 使用紧凑列表展示 display name、当前选中态、valid/invalid 状态；切换成功后立即替换 atlas/capabilities，并清空 `queuedAnimations`、重置 `frameIndex`。atlas 加载失败会回退内置 default Petdex atlas，避免 blank。
+- 选择持久化由 `companion-settings.json` 记录 `selectedCompanionId`；无效资产选择在 Rust 层拒绝并保留当前 companion，当前选择失效时 catalog 回退 default。
+- asset protocol 已启用且 scope 仅限 `$HOME/.petdex/pets/**` 与 `$HOME/.codex/pets/**`；spritesheet 路径拒绝 absolute/parent escape、symlink、非 file 和非 1536x1872 Petdex atlas，避免开放任意文件。
+- packaged app smoke：`pnpm tauri:build:app` 生成 release `.app` 并从该 `.app` 启动；runtime descriptor discovery 成功，WindowServer 元数据确认 `AI Partner M0` on-screen，启动/重启后前台应用仍为 `Codex`；`pnpm debug:send running/reading/waiting/done` 均被 packaged endpoint 接受。
+- packaged selector 自动点击未计为完整通过：当前 macOS 自动化仍不能稳定把 CGEvent/System Events 坐标点击交给透明 accessory Tauri WebView，AX 也不暴露 WebView 控件树；`screencapture -R`/旧 CGDisplay 区域截图路径不可用。本轮因此以 Rust catalog/select tests、frontend selector tests、asset protocol preflight、packaged endpoint/WindowServer/focus 元数据作为证据，并保留真实手点 selector 作为后续 manual smoke 项。
+- packaged smoke 过程中发现 selector popover 原本向上展开，默认窗口下会跑出顶部；已改为向下展开并补 layout sanity test。
+
+2026-06-14 local companion selector v0 manual hand-click smoke：
+
+- 起点：HEAD `97f117b feat: add local companion selector`；初始工作区只有未跟踪 `.agents/`，未纳入 git。
+- 未使用 `pnpm tauri:dev`。已存在 release `.app`，本轮直接启动 `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/macos/AI Partner.app`；启动后 `pnpm debug:discover` 发现 packaged endpoint `http://127.0.0.1:57083/events`，`appInstanceId=app_20260614T093051Z_31386_e2a28f905727c030`。sandbox 下 localhost 访问仍会返回 `EPERM`，提权后本机 endpoint discovery 通过。
+- 真实鼠标手点 selector 后确认本地 companion 列表可用；`anya-2` 与 `artoria` 均可作为 valid 本地伴侣选中，当前选中态随选择更新。手动切到 `artoria` 后设置文件写入 `/Users/aloha66/Library/Application Support/com.ailoha.aipartner/companion-settings.json`，内容为 `selectedCompanionId=codex:artoria`，sprite 立即变化且未出现 blank/default fallback。
+- 在 `artoria` 选中态下依次发送 `pnpm debug:send running`、`pnpm debug:send reading`、`pnpm debug:send waiting`、`pnpm debug:send done`，均被 packaged endpoint 接受；`done` 正确复用 `waiting` 的 `run_id=run_debug_2026-06-14T10:01:04.438Z_3ab91f3c-31f2-4529-8e67-1864567d1171`。状态驱动期间 sprite/bubble 保持正常。
+- 退出 `artoria` 实例并重启 packaged app 后，`pnpm debug:discover` 发现新 endpoint `http://127.0.0.1:63759/events`，`appInstanceId=app_20260614T100151Z_40825_ba4083b583413985`；设置文件仍为 `selectedCompanionId=codex:artoria`，重启持久化通过。
+- 真实鼠标手点 selector 切回 `anya-2` 后，设置文件更新为 `selectedCompanionId=codex:anya-2`，sprite 立即变化且未出现 blank/default fallback。再次退出并重启 packaged app 后，`pnpm debug:discover` 发现 endpoint `http://127.0.0.1:64389/events`，`appInstanceId=app_20260614T100332Z_43661_5ad5240edde6523d`；设置文件仍为 `selectedCompanionId=codex:anya-2`，重启持久化通过。
+- `screencapture -x /private/tmp/ai-partner-selector-smoke-final.png` 在普通 sandbox 下仍失败为 `could not create image from display`；提权截图被安全审查拒绝，原因是可能捕获无关屏幕内容。本轮不绕过截图限制，视觉证据以真实手点观察结合设置文件、endpoint 和跨重启持久化结果记录。
+- 本轮未发现产品问题，未修改产品代码，未提交本机宠物素材或 `.agents/`。
+
+2026-06-15 local companion selector v0 DMG smoke：
+
+- 起点：HEAD `c104cf0 fix(frontend): respect drag direction for petdex motion`；与交接背景中的 `ffa405b` 不一致，未回退历史。初始与最终工作区只剩未跟踪 `.agents/skills/gstack/`，未纳入 git。
+- `pnpm package:dmg` 在 sandbox 下 preflight、frontend typed build、release `.app` build 均通过，随后 `hdiutil create` 返回“设备未配置”；按规则提权重跑同一命令后生成 `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/dmg/AI Partner_0.1.0_aarch64.dmg`，大小约 `3.0M`。卷内 `AI Partner.app` 约 `8.6M`。
+- DMG 以只读方式挂载，CRC 校验通过；从卷内复制 `AI Partner.app` 到 `/private/tmp/ai-partner-selector-dmg-smoke.mZn9Mv/AI Partner.app` 后用 `open -g -n` 后台启动，未使用 `pnpm tauri:dev` 或 build 产物旁路 app。
+- Runtime descriptor 写出到 `${TMPDIR}/ai-partner/runtime-descriptor.json`，目录权限 `0700`、文件权限 `0600`，token 只记录 `tokenLength=64`。首次启动 descriptor 指向 pid `91313`、port `60452`、`appInstanceId=app_20260614T233021Z_91313_37c4c9acbd16c169`；`lsof` 确认该 pid 来自临时安装路径并监听 `127.0.0.1:60452`。
+- `pnpm --filter @ai-partner/debug-cli debug:discover` 与 `pnpm debug:send` 在 sandbox 下仍因 localhost `EPERM` 失败；提权后 discovery 通过，发现 `http://127.0.0.1:60452/events`。窗口元数据确认 `AI Partner M0` 可见，`size=520x360`、`focused=false`，启动和事件发送期间前台应用保持为 `Google Chrome` / `Codex`，未抢焦点。
+- 本轮没有执行全屏或区域截图；Swift/WindowServer 目标截图探索因本机 toolchain/SDK 不匹配失败。全局坐标点击被安全审查拒绝，原因是可能误点其他应用；因此不把自动坐标点击冒充为真实手点。selector 交互使用目标限定 `AXPress` 作用于 `AI Partner` 自身 AX 树，并以 AX 元数据、设置文件、endpoint 和跨重启持久化作为证据。
+- selector 展开后 AX 树显示四个本地条目：`阿尼亚 valid`、`Artoria current`、`阿尼亚 valid`、`Artoria valid`，覆盖 `.petdex` 与 `.codex` 两套本地 `anya-2` / `artoria`；当前态和 valid 状态合理，仍未扩大到 marketplace、download、import、delete、edit、search 或复杂管理 UI。
+- 在 `artoria` 选中态下依次提权发送 `pnpm debug:send running`、`pnpm debug:send reading`、`pnpm debug:send waiting`、`pnpm debug:send done`，均被 DMG 安装副本的 packaged endpoint 接受；`done` 正确复用 `waiting` 的 `run_id=run_debug_2026-06-14T23:47:54.228Z_bf19c79e-bb87-4e51-96d4-ea892ecd999a`。状态驱动后 AX 元数据仍显示 selector 与 workflow UI 正常，未进入 fallback。
+- 通过目标限定 `AXPress` 从 `artoria` 切到 `anya-2` 后，设置文件更新为 `selectedCompanionId=codex:anya-2`，trigger 显示 `阿尼亚 ready` 而非 fallback，窗口仍 `focused=false`。退出 pid `91313` 后重启同一临时安装副本，`debug:discover` 发现 endpoint `http://127.0.0.1:55428/events`、`appInstanceId=app_20260615T001359Z_31970_9dde9413b2d087d4`，设置文件仍为 `codex:anya-2`，trigger 仍为 `阿尼亚 ready`，Anya 重启持久化通过。
+- 再通过目标限定 `AXPress` 从 `anya-2` 切回 `artoria` 后，设置文件更新为 `selectedCompanionId=codex:artoria`，trigger 显示 `Artoria ready` 而非 fallback，窗口仍 `focused=false`。退出 pid `31970` 后重启同一临时安装副本，`debug:discover` 发现 endpoint `http://127.0.0.1:56563/events`、`appInstanceId=app_20260615T001625Z_37654_80dfae6205bf3e93`，设置文件仍为 `codex:artoria`，trigger 仍为 `Artoria ready`，Artoria 重启持久化通过。
+- smoke 后已停止最终临时 app 实例，`System Events` 返回 `AI Partner` 进程 missing；`/Volumes/AI Partner 1` 与 `/Volumes/AI Partner` 均已 `hdiutil detach`，`mount | rg "AI Partner"` 无残留。本轮未发现产品问题，未修改产品代码，未提交本机宠物素材或 `.agents/`；当时剩余风险是 selector 切换由目标限定 AXPress 验证，未取得新的人工手点/截图视觉证据，已由 2026-06-15/16 manual hand-click 补证覆盖。
+
+2026-06-15/16 local companion selector v0 DMG manual hand-click 补证：
+
+- 起点：HEAD `0f0297d docs: record selector dmg smoke`；初始与最终工作区只剩未跟踪 `.agents/`，未纳入 git。本轮不重新打包、不使用 `pnpm tauri:dev`、不扩大到 marketplace/download/import/delete/edit/search/复杂管理 UI。
+- 复用已生成 DMG `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/dmg/AI Partner_0.1.0_aarch64.dmg`；普通 sandbox 下 `hdiutil attach` 返回“设备未配置”，按规则提权挂载后 CRC 校验通过，卷挂载到 `/Volumes/AI Partner`。从卷内复制 `AI Partner.app` 到 `/private/tmp/ai-partner-selector-handclick.uT7Q9c/AI Partner.app`，复制后约 `8.6M`，用 `open -g -n` 启动临时安装副本。
+- 首次启动 runtime descriptor 写出到 `${TMPDIR}/ai-partner/runtime-descriptor.json`，目录权限 `0700`、文件权限 `0600`，token 只记录 `tokenLength=64`。descriptor 指向 pid `12084`、port `58390`、`appInstanceId=app_20260615T114603Z_12084_2959fecbf23c6396`；`lsof` 确认 `127.0.0.1:58390` 正在监听，且可执行文件来自 `/private/tmp/ai-partner-selector-handclick.uT7Q9c/AI Partner.app/Contents/MacOS/ai-partner`。
+- `pnpm debug:discover` 在 sandbox 下仍因 localhost `EPERM` 失败；提权后 discovery 通过，发现 `http://127.0.0.1:58390/events`，pid/appInstanceId 与 descriptor 一致。
+- 用户亲手点击 selector，确认 `anya-2` 与 `artoria` 均可见、valid/current 状态合理；手动切换 `anya-2 <-> artoria` 后确认 sprite 立即变化、不 blank、不掉 default fallback。手点后设置文件落到 `selectedCompanionId=codex:anya-2`。
+- 在 `anya-2` 选中态下依次提权发送 `pnpm debug:send running`、`pnpm debug:send reading`、`pnpm debug:send waiting`、`pnpm debug:send done`，均被 DMG 安装副本的 packaged endpoint 接受；`done` 正确复用 `waiting` 的 `run_id=run_debug_2026-06-15T11:49:05.006Z_caa1c154-410f-497c-8a42-cbd538850b75`。人工观察确认状态驱动期间 sprite/bubble 正常。
+- 停止 pid `12084` 后重启同一临时安装副本，`debug:discover` 发现新 endpoint `http://127.0.0.1:60700/events`、`appInstanceId=app_20260615T115149Z_21566_fa1a3152ad35c832`，设置文件仍为 `selectedCompanionId=codex:anya-2`，Anya 重启持久化通过。
+- 用户在重启后的窗口里亲手从 `anya-2` 切到 `artoria`，确认 Artoria sprite 立即出现、不 blank、不掉 default fallback；设置文件更新为 `selectedCompanionId=codex:artoria`。在 Artoria 选中态下依次提权发送 `pnpm debug:send running`、`pnpm debug:send reading`、`pnpm debug:send waiting`、`pnpm debug:send done`，均被 packaged endpoint 接受；`done` 正确复用 `waiting` 的 `run_id=run_debug_2026-06-15T11:55:03.266Z_d7b3717f-a07d-4385-a159-2e0272f6b4ad`。
+- 停止 pid `21566` 后再次重启同一临时安装副本，`debug:discover` 发现新 endpoint `http://127.0.0.1:62967/events`、`appInstanceId=app_20260615T115716Z_28046_576c3cc8c1b467f5`，设置文件仍为 `selectedCompanionId=codex:artoria`，Artoria 重启持久化通过。
+- smoke 后已停止最终临时 app 实例 pid `28046`；`lsof` 确认 `58390`、`60700`、`62967` 均无监听残留；`hdiutil detach /Volumes/AI Partner` 成功，`mount | rg "AI Partner"` 无残留。本轮未发现产品问题，未修改产品代码，未提交本机宠物素材或 `.agents/`。剩余风险：本轮仍无截图证据，视觉结果以用户真实手点观察结合设置文件、packaged endpoint、debug send 和双向跨重启持久化记录为准。
+
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
 
 ## M1 Rust State Bridge 进展

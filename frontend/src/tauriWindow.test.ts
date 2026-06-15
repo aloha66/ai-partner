@@ -12,6 +12,7 @@ const tauriMocks = vi.hoisted(() => {
 
   return {
     invoke: vi.fn(),
+    convertFileSrc: vi.fn((path: string) => `asset://localhost/${encodeURIComponent(path)}`),
     listen: vi.fn(
       async (
         eventName: string,
@@ -49,6 +50,7 @@ const tauriMocks = vi.hoisted(() => {
       stateHandler = undefined;
       clickThroughRestoredHandler = undefined;
       tauriMocks.invoke.mockReset();
+      tauriMocks.convertFileSrc.mockClear();
       tauriMocks.listen.mockClear();
       tauriMocks.unlisten.mockClear();
     }
@@ -56,6 +58,7 @@ const tauriMocks = vi.hoisted(() => {
 });
 
 vi.mock("@tauri-apps/api/core", () => ({
+  convertFileSrc: tauriMocks.convertFileSrc,
   invoke: tauriMocks.invoke
 }));
 
@@ -188,6 +191,116 @@ describe("Tauri state bridge", () => {
     await expect(pausePartner()).resolves.toEqual({
       snapshot: pausedSnapshot,
       usedFallback: false
+    });
+  });
+
+  it("lists local companions and converts spritesheet paths to asset URLs", async () => {
+    const catalog = {
+      companions: [
+        {
+          id: "petdex:anya-2",
+          partnerId: "anya",
+          displayName: "Anya",
+          spritesheetPath: "/Users/test/.petdex/pets/anya-2/spritesheet.webp",
+          capabilities: {
+            partnerId: "anya",
+            animations: {},
+            fallbacks: {},
+            runtimeLimits: {
+              frameWidth: 192,
+              frameHeight: 208,
+              maxFramesPerAnimation: 32,
+              minFps: 1,
+              maxFps: 24
+            }
+          },
+          valid: true,
+          status: "valid",
+          errors: [],
+          source: "petdex"
+        }
+      ],
+      selectedCompanionId: "petdex:anya-2",
+      selectedCompanion: {
+        id: "petdex:anya-2",
+        partnerId: "anya",
+        displayName: "Anya",
+        spritesheetPath: "/Users/test/.petdex/pets/anya-2/spritesheet.webp",
+        capabilities: {
+          partnerId: "anya",
+          animations: {},
+          fallbacks: {},
+          runtimeLimits: {
+            frameWidth: 192,
+            frameHeight: 208,
+            maxFramesPerAnimation: 32,
+            minFps: 1,
+            maxFps: 24
+          }
+        },
+        valid: true,
+        status: "valid",
+        errors: [],
+        source: "petdex"
+      },
+      fallbackUsed: false,
+      status: "selected"
+    };
+    tauriMocks.invoke.mockResolvedValueOnce(catalog);
+    const { listLocalCompanions } = await import("./tauriWindow");
+
+    await expect(listLocalCompanions()).resolves.toMatchObject({
+      companions: [
+        {
+          id: "petdex:anya-2",
+          runtimeAtlasUrl: "asset://localhost/%2FUsers%2Ftest%2F.petdex%2Fpets%2Fanya-2%2Fspritesheet.webp"
+        }
+      ],
+      selectedCompanion: {
+        runtimeAtlasUrl: "asset://localhost/%2FUsers%2Ftest%2F.petdex%2Fpets%2Fanya-2%2Fspritesheet.webp"
+      }
+    });
+    expect(tauriMocks.invoke).toHaveBeenCalledWith("list_local_companions");
+    expect(tauriMocks.convertFileSrc).toHaveBeenCalledWith(
+      "/Users/test/.petdex/pets/anya-2/spritesheet.webp"
+    );
+  });
+
+  it("sets a selected companion through Rust", async () => {
+    tauriMocks.invoke.mockResolvedValueOnce({
+      companions: [],
+      selectedCompanionId: "petdex:artoria",
+      selectedCompanion: {
+        id: "petdex:artoria",
+        partnerId: "artoria",
+        displayName: "Artoria",
+        capabilities: {
+          partnerId: "artoria",
+          animations: {},
+          fallbacks: {},
+          runtimeLimits: {
+            frameWidth: 192,
+            frameHeight: 208,
+            maxFramesPerAnimation: 32,
+            minFps: 1,
+            maxFps: 24
+          }
+        },
+        valid: true,
+        status: "valid",
+        errors: [],
+        source: "petdex"
+      },
+      fallbackUsed: false,
+      status: "selected"
+    });
+    const { setSelectedCompanion } = await import("./tauriWindow");
+
+    await expect(setSelectedCompanion("petdex:artoria")).resolves.toMatchObject({
+      selectedCompanionId: "petdex:artoria"
+    });
+    expect(tauriMocks.invoke).toHaveBeenCalledWith("set_selected_companion", {
+      companionId: "petdex:artoria"
     });
   });
 });

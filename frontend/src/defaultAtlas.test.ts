@@ -11,12 +11,13 @@ describe("default atlas configuration", () => {
     expect(defaultAtlasUrl()).toBe(buildProbeAtlasDataUrl());
   });
 
-  it("keeps App wired to a single default atlas provider, not partner selection UI", async () => {
+  it("keeps runtime selector scoped away from marketplace and asset management", async () => {
     const readFile = await import("node:fs/promises");
     const source = await readFile.readFile(new URL("./App.tsx", import.meta.url), "utf8");
 
     expect(source).toContain("defaultAtlasUrl()");
-    expect(source).not.toMatch(/scanAssetsRoot|partner selector|pet search|marketplace/i);
+    expect(source).toContain("listLocalCompanions");
+    expect(source).not.toMatch(/marketplace|asset import|delete companion|edit companion|pet search/i);
   });
 
   it("uses the build-time golden asset data URL when configured", async () => {

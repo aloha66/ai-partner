@@ -108,6 +108,59 @@ describe("resolveAnimation", () => {
     });
   });
 
+  it("uses horizontal drag direction to select Petdex struggling compatibility motion", () => {
+    const right = resolveAnimation(
+      snapshot("waiting", { message: "向右拖动" }),
+      "struggling",
+      withoutAnimations("physical.struggling"),
+      {
+        physicalContext: {
+          horizontalDirection: "right"
+        }
+      }
+    );
+    const left = resolveAnimation(
+      snapshot("waiting", { message: "向左拖动" }),
+      "struggling",
+      withoutAnimations("physical.struggling"),
+      {
+        physicalContext: {
+          horizontalDirection: "left"
+        }
+      }
+    );
+
+    expect(right.body.animation).toBe("legacy.running-right");
+    expect(right.body.procedural).toContain("shake");
+    expect(left.body.animation).toBe("legacy.running-left");
+  });
+
+  it("keeps custom fallback priority around directional struggling rows", () => {
+    const capabilities = withAnimations(
+      {
+        "legacy.waving": {
+          animation: "legacy.waving",
+          loop: false
+        }
+      },
+      {
+        "physical.struggling": [
+          "legacy.waving",
+          "legacy.running-left",
+          "legacy.running-right",
+          "legacy.idle"
+        ]
+      }
+    );
+    const intent = resolveAnimation(snapshot("waiting"), "struggling", capabilities, {
+      physicalContext: {
+        horizontalDirection: "right"
+      }
+    });
+
+    expect(intent.body.animation).toBe("legacy.waving");
+  });
+
   it.each([
     ["waiting", "carried", "float"],
     ["waiting", "struggling", "shake"],

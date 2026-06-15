@@ -10,8 +10,11 @@ import {
   normalizeSpriteColumn,
   normalizeSpriteColumnForRow,
   petdexRowForAnimation,
-  spriteRenderModelForIntent,
-  DEFAULT_SPRITE_SCALE
+  SPRITE_RENDER_HEIGHT,
+  SPRITE_RENDER_SCALE_X,
+  SPRITE_RENDER_SCALE_Y,
+  SPRITE_RENDER_WIDTH,
+  spriteRenderModelForIntent
 } from "./spriteRenderer";
 
 function snapshot(
@@ -33,17 +36,20 @@ function snapshot(
 }
 
 describe("sprite renderer model", () => {
-  it("uses an integer default scale for the 520x360 renderer footprint", () => {
-    expect(DEFAULT_SPRITE_SCALE).toBe(0.875);
+  it("uses the enlarged target sprite size for the 520x360 renderer footprint", () => {
+    expect(SPRITE_RENDER_WIDTH).toBe(173);
+    expect(SPRITE_RENDER_HEIGHT).toBe(187);
+    expect(SPRITE_RENDER_SCALE_X).toBeCloseTo(173 / 192);
+    expect(SPRITE_RENDER_SCALE_Y).toBeCloseTo(187 / 208);
     const model = spriteRenderModelForIntent(resolvePartnerIntent(snapshot("idle"), "normal"), 0, "probe-atlas");
 
     expect(model.style).toMatchObject({
-      width: 168,
-      height: 182
+      width: 173,
+      height: 187
     });
     expect(model.atlasStyle).toMatchObject({
-      width: 1344,
-      height: 1638,
+      width: 1384,
+      height: 1683,
       transform: "translate3d(-0px, -0px, 0)"
     });
     expect(spriteRenderModelForIntent(resolvePartnerIntent(snapshot("idle"), "normal"), 0, "asset://localhost/%2Ftmp%2Fspritesheet.webp").atlasKind).toBe("asset");
@@ -64,14 +70,14 @@ describe("sprite renderer model", () => {
       backgroundPosition: "-576px -1664px"
     });
     expect(model.style).toMatchObject({
-      width: 168,
-      height: 182
+      width: 173,
+      height: 187
     });
     expect(model.atlasUrl).toBe("probe-atlas");
     expect(model.atlasStyle).toMatchObject({
-      width: 1344,
-      height: 1638,
-      transform: "translate3d(-504px, -1456px, 0)"
+      width: 1384,
+      height: 1683,
+      transform: "translate3d(-519px, -1496px, 0)"
     });
     expect(model.className).toBe("sprite-frame is-looping");
   });
@@ -134,11 +140,15 @@ describe("sprite renderer model", () => {
   });
 
   it("keeps physical procedural effects in DOM-ready classes", () => {
-    const intent = resolvePartnerIntent(snapshot("waiting", "等待确认"), "struggling");
+    const intent = resolvePartnerIntent(snapshot("waiting", "等待确认"), "struggling", {
+      physicalContext: {
+        horizontalDirection: "right"
+      }
+    });
     const model = spriteRenderModelForIntent(intent, 1, "probe-atlas");
 
-    expect(model.animation).toBe("legacy.running-left");
-    expect(model.row).toBe("running-left");
+    expect(model.animation).toBe("legacy.running-right");
+    expect(model.row).toBe("running-right");
     expect(model.procedural).toEqual(["shake"]);
     expect(model.className).toBe("sprite-frame is-looping effect-shake");
   });
