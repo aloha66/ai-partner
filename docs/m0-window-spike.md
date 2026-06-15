@@ -247,6 +247,21 @@ pnpm tauri:dev
 - 停止 pid `21566` 后再次重启同一临时安装副本，`debug:discover` 发现新 endpoint `http://127.0.0.1:62967/events`、`appInstanceId=app_20260615T115716Z_28046_576c3cc8c1b467f5`，设置文件仍为 `selectedCompanionId=codex:artoria`，Artoria 重启持久化通过。
 - smoke 后已停止最终临时 app 实例 pid `28046`；`lsof` 确认 `58390`、`60700`、`62967` 均无监听残留；`hdiutil detach /Volumes/AI Partner` 成功，`mount | rg "AI Partner"` 无残留。本轮未发现产品问题，未修改产品代码，未提交本机宠物素材或 `.agents/`。剩余风险：本轮仍无截图证据，视觉结果以用户真实手点观察结合设置文件、packaged endpoint、debug send 和双向跨重启持久化记录为准。
 
+2026-06-15 companion product UI v1 fresh packaged app smoke：
+
+- 起点：`main`/`codex/selector-v1` 位于 merge commit `c13821e` 之后；初始工作区只有未跟踪 `.agents/`，未提交 `.agents/` 或本机宠物素材。本轮先阅读 `AGENTS.md`、selector v0 记录、business requirements、engineering plan、`git status`、`git log -6`，并尝试读取 TermiPet README 作 UI 方向参考；网络连接只取到 README 开头，最终只采用“悬浮宠物、轻菜单、pet selection、主题适配”的产品方向，不复制其素材或代码。
+- 产品 UI 改为 companion-only 默认：`frontend/src/App.tsx` 默认只渲染伴侣本体、bubble 和底部状态 pill；原 M0 debug panel 仅在 dev/debug 模式下通过右键菜单的“诊断信息”打开。`resolveDebugMode` 默认 release hidden，dev 或显式 `VITE_AI_PARTNER_DEBUG` / `VITE_AI_PARTNER_APP_DEBUG` 才显示。
+- 右键菜单新增产品入口：`切换伴侣...`、暂停/恢复状态、点击穿透 6s、打开本地 pets 目录、外观（跟随系统/浅色/暗黑）、退出；“诊断信息”只在 debug 模式菜单中可见。
+- selector 从右侧 debug panel 改为轻量 modal：支持搜索/filter，本地 companion 来源显示为 `Petdex` / `Codex Desktop`，同名伴侣标明来源差异，invalid companion 显示首个 invalid reason；空状态只说明 Petdex/Codex Desktop pets folders 内没有本地 companion，不提供 marketplace/download/import/delete/edit。
+- 主题新增 `system/light/dark` 三种 preference：使用 CSS variables、`prefers-color-scheme`、`data-theme` 和 localStorage 持久化；layout sanity 覆盖 520x360 下 companion-only、menu、selector modal、light/dark CSS path 不裁切、不重叠。
+- 安全边界保持：Rust catalog 仍只扫描 `$HOME/.petdex/pets/**` 和 `$HOME/.codex/pets/**`，asset protocol scope 未放宽；新增 `open_local_pets_directory` 只接受 `petdex` / `codex` source，且拒绝 symlinked pets root，避免与 scanner 的 symlink 拒绝策略漂移。
+- 验证通过：`pnpm --filter @ai-partner/frontend test`、`pnpm test:typecheck`、`pnpm test`、`cargo test --manifest-path src-tauri/Cargo.toml`、`pnpm --filter @ai-partner/frontend build`、`pnpm smoke:dmg:preflight`、`pnpm tauri:build:app`。
+- Fresh packaged `.app` smoke：停止旧 smoke 实例后重新构建并启动 `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/macos/AI Partner.app`；runtime descriptor 权限为 `0600`；`pnpm debug:discover` 提权后发现 `http://127.0.0.1:50390/events`，`appInstanceId=app_20260615T140730Z_69561_a0dfc6322d13dac1`，pid `69561`；窗口元数据为 `1020,269 520x360`，`frontmost=false`，启动后前台应用仍为 `Codex`。
+- 默认产品 UI smoke：packaged app AX tree 只显示 `IDLE / 等待 workflow 事件` bubble 和 `live / idle` status，未出现右侧 `M0` debug panel、window controls 或 runtime strip；这确认 release 默认只见伴侣本体和必要状态反馈。
+- 状态 smoke：向 fresh packaged endpoint 提权发送 `pnpm debug:send running`、`reading`、`waiting`、`done` 均成功；`done` 复用 waiting 的 run id `run_debug_2026-06-15T14:08:38.028Z_3c70128c-5b4e-4fbd-a380-bd2087a3af9a`。AX tree 在状态驱动后显示 `READING / 正在读取项目内容` 与 `live / reading`，sprite/bubble 状态未掉 fallback。
+- 右键菜单 packaged 自动化限制：目标限定在 AI Partner 窗口内的 macOS `control-click` 没有稳定交给透明 accessory WKWebView，AX tree 未展开菜单；本轮不把该自动化路径计为通过。右键菜单/selector/theme 行为由前端 view-model/static boundary/layout tests、release build、默认 AX smoke 和后续人工手点作为验证依据。
+- 主题 smoke：light/dark/system 通过 `theme.ts` 单测、CSS variable/layout sanity 和 release build 覆盖；本轮未取得新的菜单实点主题截图。已确认 520x360 默认窗口下 menu/modal 尺寸约束不会裁切、不与 companion stack 重叠。
+
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
 
 ## M1 Rust State Bridge 进展

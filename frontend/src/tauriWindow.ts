@@ -86,6 +86,14 @@ export async function setSelectedCompanion(companionId: string): Promise<Compani
   );
 }
 
+export async function openLocalPetsDirectory(source: "petdex" | "codex"): Promise<void> {
+  await invoke("open_local_pets_directory", { source });
+}
+
+export async function quitApp(): Promise<void> {
+  await invoke("quit_app");
+}
+
 export async function listenPartnerStateChanged(
   onSnapshot: (snapshot: PartnerStateSnapshot) => void
 ): Promise<UnlistenFn> {
@@ -120,6 +128,10 @@ export async function applyM0WindowDefaults(): Promise<void> {
     window.setFocusable(false),
     window.setVisibleOnAllWorkspaces(false)
   ]);
+}
+
+export async function setWindowFocusable(focusable: boolean): Promise<void> {
+  await getCurrentWindow().setFocusable(focusable);
 }
 
 async function invokeStateCommandWithFallback(command: string): Promise<StateCommandResult> {

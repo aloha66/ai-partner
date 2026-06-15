@@ -40,25 +40,33 @@ const layout = {
   clickBannerWidth: cssPxVar("t8-click-banner-width"),
   clickBannerPadding: cssPxVar("t8-click-banner-padding"),
   clickBannerBorder: cssPxVar("t8-click-banner-border"),
-  clickBannerLineHeight: cssPxVar("t8-click-banner-line-height")
+  clickBannerLineHeight: cssPxVar("t8-click-banner-line-height"),
+  menuWidth: cssPxVar("t8-menu-width"),
+  menuMaxHeight: cssPxVar("t8-menu-max-height"),
+  selectorWidth: cssPxVar("t8-selector-width"),
+  selectorMaxHeight: cssPxVar("t8-selector-max-height"),
+  statusPillWidth: cssPxVar("t8-status-pill-width")
 };
 
 describe("default 520x360 renderer layout sanity", () => {
-  it("keeps sprite, bubble, status panel, and runtime strip inside the default window", () => {
+  it("keeps the companion-only product surface inside the default window", () => {
     const contentWidth = layout.windowWidth - layout.padding * 2;
     const contentHeight = layout.windowHeight - layout.padding * 2;
-    const companionWidth = contentWidth - layout.panelWidth - layout.gap;
+    const companionWidth = contentWidth;
     const companionStackHeight =
       layout.bubbleMaxHeight +
       layout.companionGap +
       layout.spriteHeight +
+      layout.companionGap +
+      24 +
       layout.spriteBottomSafeArea;
 
     expect(companionWidth).toBeGreaterThanOrEqual(layout.companionMinWidth);
     expect(layout.spriteWidth).toBeLessThanOrEqual(companionWidth);
     expect(layout.bubbleMaxWidth).toBeLessThanOrEqual(companionWidth);
+    expect(layout.statusPillWidth).toBeLessThanOrEqual(companionWidth);
     expect(companionStackHeight).toBeLessThanOrEqual(contentHeight);
-    expect(layout.panelWidth).toBeLessThan(contentWidth);
+    expect(styles).toMatch(/\.window-spike\s*\{[^}]*grid-template-columns:\s*1fr;/s);
   });
 
   it("keeps the partner hitbox aligned to the renderer footprint", () => {
@@ -87,9 +95,16 @@ describe("default 520x360 renderer layout sanity", () => {
     expect(styles).not.toMatch(/\.click-through-banner\s*\{[^}]*position:\s*fixed;/s);
   });
 
-  it("opens the companion selector inside the default panel instead of above the window", () => {
-    expect(styles).toMatch(/\.companion-popover\s*\{[^}]*top:\s*calc\(100% \+ 6px\);/s);
-    expect(styles).not.toMatch(/\.companion-popover\s*\{[^}]*bottom:\s*calc\(100% \+ 6px\);/s);
+  it("keeps the right-click menu and selector modal inside the default window", () => {
+    const contentWidth = layout.windowWidth - 20;
+    const contentHeight = layout.windowHeight - 20;
+
+    expect(layout.menuWidth).toBeLessThanOrEqual(contentWidth);
+    expect(layout.menuMaxHeight).toBeLessThanOrEqual(contentHeight);
+    expect(layout.selectorWidth).toBeLessThanOrEqual(contentWidth);
+    expect(layout.selectorMaxHeight).toBeLessThanOrEqual(contentHeight);
+    expect(styles).toMatch(/\.selector-backdrop\s*\{[^}]*place-items:\s*end center;/s);
+    expect(styles).not.toMatch(/marketplace|download|import|delete|edit companion/i);
   });
 
   it("keeps runtime strip labels short enough for the default right panel", () => {
@@ -99,5 +114,13 @@ describe("default 520x360 renderer layout sanity", () => {
     const panelInnerWidth = layout.panelWidth - 2 * layout.panelPadding - 2 * layout.panelBorder;
 
     expect(conservativeTextWidth + iconAndGapBudget).toBeLessThanOrEqual(panelInnerWidth);
+  });
+
+  it("declares light, dark, and system theme paths with CSS variables", () => {
+    expect(styles).toMatch(/@media\s*\(prefers-color-scheme:\s*dark\)/);
+    expect(styles).toMatch(/:root\[data-theme="light"\]/);
+    expect(styles).toMatch(/:root\[data-theme="dark"\]/);
+    expect(styles).toContain("--color-surface");
+    expect(styles).toContain("--color-accent");
   });
 });

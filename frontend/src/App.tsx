@@ -1,17 +1,25 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   ArrowDownToLine,
+  Bug,
   CheckCircle2,
   CirclePause,
   CirclePlay,
   CircleX,
+  FolderOpen,
   Focus,
   Layers2,
   MousePointer2,
   Move,
+  Palette,
+  Power,
+  Search,
   ScanLine,
   ShieldCheck,
+  Sparkles,
+  SunMoon,
   UserRound,
+  X,
   XCircle
 } from "lucide-react";
 import { type AnimationIntent } from "@ai-partner/contracts";
@@ -29,9 +37,12 @@ import {
   listenPartnerStateChanged,
   listLocalCompanions,
   moveWindowTo,
+  openLocalPetsDirectory,
   pausePartner,
+  quitApp,
   registerClickThroughRecovery,
   resumePartner,
+  setWindowFocusable,
   setSelectedCompanion,
   type StateCommandResult,
   type SpikeStatus,
@@ -54,8 +65,17 @@ import { PartnerRenderer } from "./spriteRenderer";
 import { defaultAtlasUrl } from "./defaultAtlas";
 import {
   activeCompanionView,
-  canSwitchCompanion
+  canSwitchCompanion,
+  companionSelectorOptions
 } from "./companionSelector";
+import {
+  readStoredTheme,
+  resolveTheme,
+  storeTheme,
+  themeLabel,
+  type ThemePreference
+} from "./theme";
+import { resolveDebugMode } from "./debugMode";
 import "./styles.css";
 
 type DragState = {
@@ -71,6 +91,14 @@ type DragState = {
 type PhysicalTimerName = "struggle" | "land" | "recover";
 
 const DRAG_DIRECTION_THRESHOLD_PX = 1;
+const selectorInputId = "companion-selector-search";
+
+const debugMode = resolveDebugMode({
+  dev: import.meta.env.DEV,
+  mode: import.meta.env.MODE,
+  viteDebug: import.meta.env.VITE_AI_PARTNER_DEBUG,
+  appDebug: import.meta.env.VITE_AI_PARTNER_APP_DEBUG
+});
 
 const checks = [
   ["transparent", "透明"],
@@ -130,6 +158,15 @@ export function App() {
   const [companionCatalog, setCompanionCatalog] = useState<CompanionCatalog | null>(null);
   const [companionStatus, setCompanionStatus] = useState("scan");
   const [selectorOpen, setSelectorOpen] = useState(false);
+  const [selectorQuery, setSelectorQuery] = useState("");
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
+  const [debugPanelOpen, setDebugPanelOpen] = useState(false);
+  const [themePreference, setThemePreference] = useState<ThemePreference>(() =>
+    readStoredTheme(window.localStorage)
+  );
+  const [systemDark, setSystemDark] = useState(() =>
+    window.matchMedia("(prefers-color-scheme: dark)").matches
+  );
   const [atlasFailed, setAtlasFailed] = useState(false);
   const [physicalMachine, dispatchPhysical] = useReducer(
     physicalStateMachine,
@@ -147,6 +184,8 @@ export function App() {
   const stateRevisionRef = useRef(0);
   const physicalState = physicalMachine.state;
   const dragging = physicalState === "carried" || physicalState === "struggling";
+  const debugPanelVisible = debugMode === "visible" && debugPanelOpen;
+  const resolvedTheme = resolveTheme(themePreference, systemDark);
   const activeCompanion = useMemo(
     () => activeCompanionView(atlasFailed ? null : companionCatalog, fallbackAtlasUrl),
     [atlasFailed, companionCatalog, fallbackAtlasUrl]
@@ -163,12 +202,41 @@ export function App() {
     [partnerState, physicalState, queuedAnimations, activeCompanion.capabilities, dragDirection]
   );
   const stateDisplay = partnerStateDisplay(partnerState);
+  const selectorOptions = useMemo(
+    () => companionSelectorOptions(companionCatalog, activeCompanion.id, selectorQuery),
+    [companionCatalog, activeCompanion.id, selectorQuery]
+  );
 
   useEffect(() => {
     setQueuedAnimations((current) =>
       queuedAnimationsEqual(current, animationIntent.queued) ? current : animationIntent.queued
     );
   }, [animationIntent.queued]);
+
+  useEffect(() => {
+    const query = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = (event: MediaQueryListEvent) => setSystemDark(event.matches);
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = resolvedTheme;
+    document.documentElement.dataset.themePreference = themePreference;
+    storeTheme(window.localStorage, themePreference);
+  }, [resolvedTheme, themePreference]);
+
+  useEffect(() => {
+    if (selectorOpen) {
+      setWindowFocusable(true).catch(() => undefined);
+      return () => {
+        setWindowFocusable(false).catch(() => undefined);
+      };
+    }
+    setSelectorQuery("");
+    setWindowFocusable(false).catch(() => undefined);
+    return undefined;
+  }, [selectorOpen]);
 
   useEffect(() => {
     let shortcutCleanup: (() => void) | undefined;
@@ -487,8 +555,52 @@ export function App() {
     setCompanionStatus("fallback");
   }
 
+  function openContextMenu(event: React.MouseEvent<HTMLElement>) {
+    event.preventDefault();
+    setContextMenuOpen(true);
+  }
+
+  function closeContextMenu() {
+    setContextMenuOpen(false);
+  }
+
+  function openSelector() {
+    setSelectorOpen(true);
+    closeContextMenu();
+  }
+
+  function closeSelector() {
+    setSelectorOpen(false);
+  }
+
+  async function togglePauseFromMenu() {
+    closeContextMenu();
+    await applyStateCommand(stateDisplay.canResume ? resumePartner : pausePartner);
+  }
+
+  async function openActivePetsDirectory() {
+    closeContextMenu();
+    const source = activeCompanion.source === "codex" ? "codex" : "petdex";
+    await openLocalPetsDirectory(source).catch(() => setCompanionStatus("fail"));
+  }
+
+  function chooseTheme(preference: ThemePreference) {
+    setThemePreference(preference);
+    closeContextMenu();
+  }
+
   return (
-    <main className="window-spike">
+    <main
+      className={`window-spike theme-${resolvedTheme} ${debugPanelVisible ? "debug-visible" : "debug-hidden"}`}
+      data-debug-mode={debugMode}
+      data-theme-preference={themePreference}
+      onContextMenu={openContextMenu}
+      onPointerDown={(event) => {
+        if (event.button === 0 && contextMenuOpen) {
+          closeContextMenu();
+        }
+      }}
+    >
       <section className="companion-zone" aria-label="M0 window spike">
         <PartnerRenderer
           intent={animationIntent}
@@ -502,52 +614,168 @@ export function App() {
           onPointerCancel={() => resetManagedDrag("pointer_cancel")}
           onLostPointerCapture={resetLostCaptureIfDragging}
         />
+
+        <div className="status-pill" role="status" aria-live="polite">
+          <span>{stateDisplay.pausedLabel}</span>
+          <strong>{activeCompanion.fallbackUsed || atlasFailed ? "fallback" : stateDisplay.workflowLabel}</strong>
+        </div>
       </section>
 
+      {contextMenuOpen ? (
+        <div
+          className="companion-menu"
+          role="menu"
+          aria-label="companion menu"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <button className="menu-item" type="button" role="menuitem" onClick={openSelector}>
+            <Sparkles size={16} aria-hidden />
+            <span>切换伴侣...</span>
+          </button>
+          <button className="menu-item" type="button" role="menuitem" onClick={() => void togglePauseFromMenu()}>
+            {stateDisplay.canResume ? (
+              <CirclePlay size={16} aria-hidden />
+            ) : (
+              <CirclePause size={16} aria-hidden />
+            )}
+            <span>{stateDisplay.canResume ? "恢复状态" : "暂停状态"}</span>
+          </button>
+          <button
+            className="menu-item"
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              closeContextMenu();
+              void toggleClickThrough();
+            }}
+          >
+            <MousePointer2 size={16} aria-hidden />
+            <span>点击穿透 6s</span>
+          </button>
+          <button className="menu-item" type="button" role="menuitem" onClick={() => void openActivePetsDirectory()}>
+            <FolderOpen size={16} aria-hidden />
+            <span>打开本地 pets 目录</span>
+          </button>
+          <div className="menu-group" role="group" aria-label="外观">
+            <div className="menu-group-label">
+              <Palette size={15} aria-hidden />
+              <span>外观</span>
+            </div>
+            {(["system", "light", "dark"] as const).map((preference) => (
+              <button
+                key={preference}
+                className={`theme-choice ${themePreference === preference ? "is-selected" : ""}`}
+                type="button"
+                onClick={() => chooseTheme(preference)}
+              >
+                <SunMoon size={14} aria-hidden />
+                <span>{themeLabel(preference)}</span>
+              </button>
+            ))}
+          </div>
+          {debugMode === "visible" ? (
+            <button
+              className="menu-item"
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setDebugPanelOpen((value) => !value);
+                closeContextMenu();
+              }}
+            >
+              <Bug size={16} aria-hidden />
+              <span>诊断信息</span>
+            </button>
+          ) : null}
+          <button className="menu-item danger" type="button" role="menuitem" onClick={() => void quitApp()}>
+            <Power size={16} aria-hidden />
+            <span>退出</span>
+          </button>
+        </div>
+      ) : null}
+
+      {selectorOpen ? (
+        <div className="selector-backdrop" role="presentation" onPointerDown={closeSelector}>
+          <section
+            className="companion-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="companion-selector-title"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <header className="modal-header">
+              <div>
+                <p>Local companions</p>
+                <h1 id="companion-selector-title">切换伴侣</h1>
+              </div>
+              <button className="icon-button quiet" type="button" aria-label="关闭选择器" onClick={closeSelector}>
+                <X size={17} aria-hidden />
+              </button>
+            </header>
+            <label className="selector-search" htmlFor={selectorInputId}>
+              <Search size={15} aria-hidden />
+              <input
+                id={selectorInputId}
+                autoFocus
+                value={selectorQuery}
+                onChange={(event) => setSelectorQuery(event.target.value)}
+                placeholder="搜索本地伴侣"
+              />
+            </label>
+            <div className="selector-list" role="listbox" aria-label="local companions">
+              {selectorOptions.map((option) => (
+                <button
+                  key={option.companion.id}
+                  className={`selector-option ${option.selected ? "is-selected" : ""}`}
+                  type="button"
+                  disabled={!option.switchable}
+                  onClick={() => void switchCompanion(option.companion)}
+                >
+                  {option.companion.valid ? (
+                    <CheckCircle2 size={16} aria-hidden />
+                  ) : (
+                    <XCircle size={16} aria-hidden />
+                  )}
+                  <span className="selector-option-main">
+                    <strong>{option.companion.displayName}</strong>
+                    <span>
+                      {option.sourceLabel}
+                      {option.duplicateName ? " source variant" : ""}
+                    </span>
+                  </span>
+                  <span className="selector-option-status">
+                    {option.selected ? "current" : option.companion.valid ? option.companion.status : option.reason}
+                  </span>
+                </button>
+              ))}
+              {companionCatalog && companionCatalog.companions.length === 0 ? (
+                <div className="selector-empty">
+                  No local companions in Petdex or Codex Desktop pets folders.
+                </div>
+              ) : null}
+              {companionCatalog && companionCatalog.companions.length > 0 && selectorOptions.length === 0 ? (
+                <div className="selector-empty">
+                  No local companions match "{selectorQuery}".
+                </div>
+              ) : null}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {debugPanelVisible ? (
       <aside className="spike-panel">
         <div className="panel-header">
           <ShieldCheck size={18} aria-hidden />
           <span>M0</span>
         </div>
 
-        <div className="companion-card" aria-label="companion selector">
-          <button
-            className="companion-trigger"
-            type="button"
-            aria-expanded={selectorOpen}
-            onClick={() => setSelectorOpen((value) => !value)}
-          >
+        <div className="companion-card" aria-label="active companion debug summary">
+          <div className="companion-trigger">
             <UserRound size={16} aria-hidden />
             <span>{activeCompanion.name}</span>
             <strong>{activeCompanion.fallbackUsed || atlasFailed ? "fallback" : companionStatus}</strong>
-          </button>
-          {selectorOpen ? (
-            <div className="companion-popover" role="listbox">
-              {(companionCatalog?.companions ?? []).map((companion) => {
-                const selected = companion.id === activeCompanion.id;
-                return (
-                  <button
-                    key={companion.id}
-                    className={`companion-option ${selected ? "is-selected" : ""}`}
-                    type="button"
-                    disabled={!canSwitchCompanion(companion, activeCompanion.id)}
-                    onClick={() => void switchCompanion(companion)}
-                  >
-                    {companion.valid ? (
-                      <CheckCircle2 size={14} aria-hidden />
-                    ) : (
-                      <XCircle size={14} aria-hidden />
-                    )}
-                    <span>{companion.displayName}</span>
-                    <strong>{selected ? "current" : companion.status}</strong>
-                  </button>
-                );
-              })}
-              {companionCatalog && companionCatalog.companions.length === 0 ? (
-                <div className="companion-empty">No local pets</div>
-              ) : null}
-            </div>
-          ) : null}
+          </div>
         </div>
 
         <div className="check-grid">
@@ -668,6 +896,7 @@ export function App() {
           </div>
         )}
       </aside>
+      ) : null}
     </main>
   );
 }
