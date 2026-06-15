@@ -262,6 +262,14 @@ pnpm tauri:dev
 - 右键菜单 packaged 自动化限制：目标限定在 AI Partner 窗口内的 macOS `control-click` 没有稳定交给透明 accessory WKWebView，AX tree 未展开菜单；本轮不把该自动化路径计为通过。右键菜单/selector/theme 行为由前端 view-model/static boundary/layout tests、release build、默认 AX smoke 和后续人工手点作为验证依据。
 - 主题 smoke：light/dark/system 通过 `theme.ts` 单测、CSS variable/layout sanity 和 release build 覆盖；本轮未取得新的菜单实点主题截图。已确认 520x360 默认窗口下 menu/modal 尺寸约束不会裁切、不与 companion stack 重叠。
 
+2026-06-15 PR #2 review follow-up：
+
+- Review 修复了右键菜单事件边界：右键不再进入 companion 拖动/physical 路径；菜单只从可见 companion 区域触发，并按右键点位夹在 520x360 窗口内，避免固定右下角和空白区域误弹菜单。
+- Selector modal 补齐 scan/fail 状态文案；空目录、搜索无结果、invalid reason、source variant 仍保持本地-only 范围，不加入 marketplace/download/import/delete/edit。
+- Theme persistence 补齐 localStorage 异常容错：storage 不可用时仍可按 system 默认渲染，主题写入失败不阻断 UI。
+- Rust `open_local_pets_directory` review 修复：native open command 现在在创建/打开前拒绝 `.petdex`/`.codex` source parent 或 `pets` 目录本身为 symlink，并使用 canonical pets directory；asset protocol scope 仍仅为 `$HOME/.petdex/pets/**` 与 `$HOME/.codex/pets/**`。
+- 已补针对性测试：frontend product UI boundary/theme tests、Rust companion parent symlink/ensure directory tests。剩余人工 hand-click 补证仍是 product UI v1 菜单路径：右键菜单打开/关闭、从菜单打开 selector、搜索/切换、打开本地 pets 目录、system/light/dark 三态、退出按钮。
+
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
 
 ## M1 Rust State Bridge 进展

@@ -89,7 +89,14 @@ type DragState = {
 };
 
 type PhysicalTimerName = "struggle" | "land" | "recover";
+type MenuPosition = {
+  x: number;
+  y: number;
+};
 
+const CONTEXT_MENU_WIDTH_PX = 206;
+const CONTEXT_MENU_MAX_HEIGHT_PX = 330;
+const CONTEXT_MENU_MARGIN_PX = 10;
 const DRAG_DIRECTION_THRESHOLD_PX = 1;
 const selectorInputId = "companion-selector-search";
 
@@ -131,6 +138,29 @@ function runtimeRunStatus(runLabel: string): string {
   return runLabel === "no active run" ? "r0" : "r1";
 }
 
+function readInitialThemePreference(): ThemePreference {
+  try {
+    return readStoredTheme(window.localStorage);
+  } catch {
+    return "system";
+  }
+}
+
+function contextMenuPosition(clientX: number, clientY: number): MenuPosition {
+  const viewportWidth = Math.max(window.innerWidth, CONTEXT_MENU_WIDTH_PX + CONTEXT_MENU_MARGIN_PX * 2);
+  const viewportHeight = Math.max(window.innerHeight, CONTEXT_MENU_MAX_HEIGHT_PX + CONTEXT_MENU_MARGIN_PX * 2);
+  return {
+    x: Math.min(
+      Math.max(clientX, CONTEXT_MENU_MARGIN_PX),
+      viewportWidth - CONTEXT_MENU_WIDTH_PX - CONTEXT_MENU_MARGIN_PX
+    ),
+    y: Math.min(
+      Math.max(clientY, CONTEXT_MENU_MARGIN_PX),
+      viewportHeight - CONTEXT_MENU_MAX_HEIGHT_PX - CONTEXT_MENU_MARGIN_PX
+    )
+  };
+}
+
 function queuedAnimationsEqual(
   left: AnimationIntent["queued"],
   right: AnimationIntent["queued"]
@@ -160,10 +190,9 @@ export function App() {
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [selectorQuery, setSelectorQuery] = useState("");
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<MenuPosition>({ x: 10, y: 10 });
   const [debugPanelOpen, setDebugPanelOpen] = useState(false);
-  const [themePreference, setThemePreference] = useState<ThemePreference>(() =>
-    readStoredTheme(window.localStorage)
-  );
+  const [themePreference, setThemePreference] = useState<ThemePreference>(readInitialThemePreference);
   const [systemDark, setSystemDark] = useState(() =>
     window.matchMedia("(prefers-color-scheme: dark)").matches
   );
@@ -228,8 +257,18 @@ export function App() {
 
   useEffect(() => {
     if (selectorOpen) {
-      setWindowFocusable(true).catch(() => undefined);
+      let active = true;
+      setWindowFocusable(true)
+        .catch(() => undefined)
+        .finally(() => {
+          window.requestAnimationFrame(() => {
+            if (active) {
+              document.getElementById(selectorInputId)?.focus();
+            }
+          });
+        });
       return () => {
+        active = false;
         setWindowFocusable(false).catch(() => undefined);
       };
     }
@@ -237,6 +276,22 @@ export function App() {
     setWindowFocusable(false).catch(() => undefined);
     return undefined;
   }, [selectorOpen]);
+
+  useEffect(() => {
+    if (!selectorOpen && !contextMenuOpen) {
+      return undefined;
+    }
+
+    function closeTransientUi(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setSelectorOpen(false);
+        setContextMenuOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", closeTransientUi);
+    return () => window.removeEventListener("keydown", closeTransientUi);
+  }, [selectorOpen, contextMenuOpen]);
 
   useEffect(() => {
     let shortcutCleanup: (() => void) | undefined;
@@ -351,6 +406,10 @@ export function App() {
   }, []);
 
   async function beginManagedDrag(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) {
+      return;
+    }
+
     const attempt = dragAttemptRef.current + 1;
     dragAttemptRef.current = attempt;
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -556,7 +615,13 @@ export function App() {
   }
 
   function openContextMenu(event: React.MouseEvent<HTMLElement>) {
+    if (event.target === event.currentTarget) {
+      closeContextMenu();
+      return;
+    }
+
     event.preventDefault();
+    setMenuPosition(contextMenuPosition(event.clientX, event.clientY));
     setContextMenuOpen(true);
   }
 
@@ -594,14 +659,13 @@ export function App() {
       className={`window-spike theme-${resolvedTheme} ${debugPanelVisible ? "debug-visible" : "debug-hidden"}`}
       data-debug-mode={debugMode}
       data-theme-preference={themePreference}
-      onContextMenu={openContextMenu}
       onPointerDown={(event) => {
         if (event.button === 0 && contextMenuOpen) {
           closeContextMenu();
         }
       }}
     >
-      <section className="companion-zone" aria-label="M0 window spike">
+      <section className="companion-zone" aria-label="M0 window spike" onContextMenu={openContextMenu}>
         <PartnerRenderer
           intent={animationIntent}
           frameIndex={frameIndex}
@@ -626,6 +690,7 @@ export function App() {
           className="companion-menu"
           role="menu"
           aria-label="companion menu"
+          style={{ left: menuPosition.x, top: menuPosition.y }}
           onPointerDown={(event) => event.stopPropagation()}
         >
           <button className="menu-item" type="button" role="menuitem" onClick={openSelector}>
@@ -756,6 +821,16 @@ export function App() {
               {companionCatalog && companionCatalog.companions.length > 0 && selectorOptions.length === 0 ? (
                 <div className="selector-empty">
                   No local companions match "{selectorQuery}".
+                </div>
+              ) : null}
+              {!companionCatalog && companionStatus !== "fail" ? (
+                <div className="selector-empty">
+                  Scanning Petdex and Codex Desktop pets folders.
+                </div>
+              ) : null}
+              {!companionCatalog && companionStatus === "fail" ? (
+                <div className="selector-empty">
+                  Could not read local companion folders.
                 </div>
               ) : null}
             </div>

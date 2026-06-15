@@ -19,6 +19,9 @@ describe("companion product UI boundary", () => {
 
   it("uses a right-click menu for product controls", () => {
     expect(appSource).toContain("onContextMenu={openContextMenu}");
+    expect(appSource).toContain("if (event.button !== 0)");
+    expect(appSource).toContain("contextMenuPosition(event.clientX, event.clientY)");
+    expect(appSource).toContain("if (event.target === event.currentTarget)");
     expect(appSource).toMatch(/role="menu"[\s\S]*aria-label="companion menu"/);
     expect(appSource).toContain("切换伴侣...");
     expect(appSource).toContain("点击穿透 6s");
@@ -30,6 +33,8 @@ describe("companion product UI boundary", () => {
     expect(appSource).toContain('role="dialog"');
     expect(appSource).toContain("搜索本地伴侣");
     expect(appSource).toContain("Local companions");
+    expect(appSource).toContain("Scanning Petdex and Codex Desktop pets folders.");
+    expect(appSource).toContain("Could not read local companion folders.");
     expect(userFacingText).not.toMatch(/marketplace|download|import|delete|edit companion/i);
   });
 });

@@ -292,8 +292,6 @@ button {
 .companion-menu {
   box-sizing: border-box;
   position: absolute;
-  right: 10px;
-  bottom: 40px;
   z-index: 20;
   width: min(var(--t8-menu-width), calc(100vw - 20px));
   max-height: var(--t8-menu-max-height);

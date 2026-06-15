@@ -7,7 +7,7 @@ mod ingress;
 mod state;
 
 use companions::{
-    get_catalog, local_pets_directory, select_companion, CompanionCatalog, CompanionStore,
+    ensure_local_pets_directory, get_catalog, select_companion, CompanionCatalog, CompanionStore,
 };
 use state::{
     PartnerStateSnapshot, PartnerStateStore, WorkflowEventWire, PARTNER_STATE_CHANGED_EVENT,
@@ -111,8 +111,7 @@ fn set_selected_companion(
 
 #[tauri::command]
 fn open_local_pets_directory(store: State<'_, CompanionStore>, source: String) -> Result<(), String> {
-    let directory = local_pets_directory(&store, &source)?;
-    std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    let directory = ensure_local_pets_directory(&store, &source)?;
     std::process::Command::new("open")
         .arg(&directory)
         .status()

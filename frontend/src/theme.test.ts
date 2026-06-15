@@ -30,10 +30,23 @@ describe("theme preference", () => {
     expect(readStoredTheme(storage)).toBe("system");
   });
 
+  it("treats storage failures as non-fatal", () => {
+    const throwingStorage = {
+      getItem() {
+        throw new Error("storage disabled");
+      },
+      setItem() {
+        throw new Error("storage disabled");
+      }
+    };
+
+    expect(readStoredTheme(throwingStorage)).toBe("system");
+    expect(() => storeTheme(throwingStorage, "dark")).not.toThrow();
+  });
+
   it("returns compact menu labels", () => {
     expect(themeLabel("system")).toBe("跟随系统");
     expect(themeLabel("light")).toBe("浅色");
     expect(themeLabel("dark")).toBe("暗黑");
   });
 });
-
