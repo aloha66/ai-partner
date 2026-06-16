@@ -1,6 +1,6 @@
 # AI Partner MVP 内测分发说明
 
-日期：2026-06-13
+日期：2026-06-16
 对象：1-3 位 Apple Silicon macOS 技术内测者。
 
 这份文档是当前内部 DMG 的测试者操作单。Release 身份、范围、ready 证据、已知限制和非 MVP 清单以 [MVP Release Handoff](./mvp-release-handoff.md) 为准；如果本文和 handoff 冲突，以 handoff 为准。
@@ -8,10 +8,11 @@
 ## 制品
 
 - DMG：`/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/dmg/AI Partner_0.1.0_aarch64.dmg`
-- 大小：3,059,201 bytes
-- SHA256：`3a24a423cf8371eeaa9a891eca8ec1489aa2d3d2e1b7dac667fcaa0b6e8ac2eb`
+- 大小：3,144,504 bytes
+- SHA256：`26ad69629e4ead31c29340a3763f97a928a123b8143f9817c9284f398a536cd4`
+- 产品源码 commit：`0098ec2901e244aa16cac00a324d3c440fc42762` (`0098ec2 Merge pull request #2 from aloha66/codex/selector-v1`)
 - Release handoff：`docs/mvp-release-handoff.md`
-- 本轮制品包含 MVP 内测本机事件流 HTTP 400 边缘问题修复。
+- 本轮制品包含 PR #2 merge 后的本地伴侣 selector/source variant/search empty state 刷新，并保留 MVP 本机事件流 smoke 通过状态。
 
 安装前先校验 checksum：
 
@@ -22,8 +23,21 @@ shasum -a 256 "/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/dm
 预期输出以这段开头：
 
 ```text
-3a24a423cf8371eeaa9a891eca8ec1489aa2d3d2e1b7dac667fcaa0b6e8ac2eb
+26ad69629e4ead31c29340a3763f97a928a123b8143f9817c9284f398a536cd4
 ```
+
+## 本轮 smoke 证据摘要
+
+- `pnpm run package:dmg` 通过，产出 packaged app 和 DMG；本轮没有使用 `pnpm tauri:dev`。
+- DMG 以 read-only 方式挂载并通过 image CRC 校验；卷内包含 `AI Partner.app` 和 `Applications -> /Applications` symlink。
+- 从 DMG 复制到 `/private/tmp/ai-partner-dmg-smoke.p8WjQ0/install/AI Partner.app` 后以后台方式启动 packaged app。
+- packaged app 写出 runtime descriptor；目录权限 `0700`，文件权限 `0600`，token 只记录长度 64，不记录明文。
+- `pnpm debug:discover` 找到 packaged endpoint `http://127.0.0.1:54083/events`。
+- `pnpm debug:send running/reading/waiting/done` 均发送成功，run id 为 `run_smoke_20260616T130915Z`。
+- release 默认无 M0 debug panel：production build 和 `debugMode.test.ts` 均通过。
+- selector/source variant/search empty state 基本可用：`AppProductUiBoundary.test.ts`、`companionSelector.test.ts` 和完整 frontend test run 通过。
+- 本机 Artoria/Anya 伴侣路径存在且非空：`~/.petdex/pets/{artoria,anya-2}` 与 `~/.codex/pets/{artoria,anya-2}` 均有 `pet.json` 和 `spritesheet.webp`；相关真实素材 smoke、selector view-model 和 store 测试通过，未复制或提交任何私有宠物素材。
+- 退出 packaged app 后，旧 descriptor 被 `debug:discover --descriptor` 判定为 `descriptor_stale`，旧 port 不再监听。
 
 ## 安装步骤
 
@@ -47,6 +61,12 @@ shasum -a 256 "/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/dm
 - 未做 stapling。
 - Gatekeeper 可能警告、拦截首次启动，或要求用户手动允许。
 - 不要公开分发，也不要发给非技术用户。
+
+## 自动化限制
+
+- Codex Computer Use 的 Accessibility / Screen Recording 权限在本轮 smoke 时仍处于 pending 状态，所以没有把自动截图或 WebView 文本抽取作为通过依据。
+- 当前 macOS 自动化命令受权限和沙箱影响明显：`pgrep`、`ps`、System Events、localhost probing、`hdiutil` mount/create 在受限环境中可能失败。本轮用 package metadata、runtime descriptor、debug endpoint、`lsof`、前端/ Rust 测试和 stale descriptor 验证作为证据。
+- 测试者如果手动截图反馈，请注意不要包含私有代码、聊天内容或桌面敏感信息。
 
 ## 内测任务
 

@@ -1,17 +1,17 @@
 # AI Partner MVP Release Handoff
 
-Date: 2026-06-11
+Date: 2026-06-16
 
 ## Release identity
 
-- Release scope: macOS Codex technical preview / MVP internal DMG handoff.
-- Git commit: `a6561be557f747ef6080f79a0e9a64d1bd0bc036` (`a6561be docs(release): record mvp dmg readiness smoke`).
-- Artifact binding: the DMG below is the MVP readiness artifact recorded and handed off against commit `a6561be`. Commit `a6561be` is documentation-only relative to the smoke-tested product build, so it does not change packaged runtime behavior.
+- Release scope: macOS Codex technical preview / MVP internal beta DMG refresh after PR #2.
+- Product source commit: `0098ec2901e244aa16cac00a324d3c440fc42762` (`0098ec2 Merge pull request #2 from aloha66/codex/selector-v1`).
+- Artifact binding: the DMG below was rebuilt from packaged release output on `0098ec2`. This handoff PR is documentation-only relative to the smoke-tested product build, so it records the refreshed artifact without changing packaged runtime behavior.
 - DMG path: `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/dmg/AI Partner_0.1.0_aarch64.dmg`
-- DMG size: `3,059,708 bytes` (about `2.9 MiB`).
-- DMG SHA256: `b1c0ac42f766f1e6c2eb62bebdbe69e9283fe75c2098ba925d060b270207cd8f`
+- DMG size: `3,144,504 bytes` (about `3.0 MiB`).
+- DMG SHA256: `26ad69629e4ead31c29340a3763f97a928a123b8143f9817c9284f398a536cd4`
 - Packaged app path: `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/macos/AI Partner.app`
-- Packaged app size: about `8.4 MiB`.
+- Packaged app size: about `8.6 MiB` (`8,824 KiB` by `du -sk`).
 
 ## Install
 
@@ -26,15 +26,20 @@ Date: 2026-06-11
 
 ## Smoke verification summary
 
-- `pnpm package:dmg` passed and produced the DMG above.
-- The DMG mounted read-only at `/Volumes/AI Partner`.
-- The mounted volume contained `AI Partner.app` and an `Applications -> /Applications` symlink.
-- A temporary install from the DMG launched successfully.
-- The default `AI Partner M0` window was visible.
-- `pnpm debug:discover` found the packaged app runtime descriptor endpoint.
-- `pnpm debug:send waiting` and `pnpm debug:send done` both succeeded; `done` reused the active waiting run id.
-- Launching the packaged app and sending debug events did not steal focus from the foreground app.
-- No release blocker was found during the MVP DMG readiness smoke.
+- `pnpm run package:dmg` passed. It ran the macOS package preflight, `tauri build --bundles app`, frontend production build, Rust release build, app bundling, and `hdiutil create`.
+- The DMG mounted read-only at `/private/tmp/ai-partner-dmg-smoke.p8WjQ0/mount` with image CRC verification. The mounted volume contained `AI Partner.app` and an `Applications -> /Applications` symlink.
+- A temporary install copied from the DMG with `ditto` launched via `open -g -n "/private/tmp/ai-partner-dmg-smoke.p8WjQ0/install/AI Partner.app"`.
+- Runtime descriptor discovery succeeded for the packaged app: `schemaVersion=ai-partner.runtime-descriptor.v1`, `appInstanceId=app_20260616T130915Z_615_e165aa403295565f`, `pid=615`, `port=54083`, `createdAt=2026-06-16T13:09:15.205778+00:00`, and `tokenLength=64`.
+- Runtime descriptor permissions passed: descriptor directory `0700`, descriptor file `0600`.
+- `lsof` confirmed the running process came from the temporary DMG install path and listened on `127.0.0.1:54083`.
+- `pnpm debug:discover` found `http://127.0.0.1:54083/events` for the packaged app.
+- `pnpm debug:send running`, `reading`, `waiting`, and `done` all succeeded against the packaged endpoint using run id `run_smoke_20260616T130915Z`.
+- Release defaults keep the M0 debug panel hidden: `frontend/src/debugMode.test.ts` passed, and the production frontend build completed as part of `pnpm run package:dmg`.
+- Selector/source variant/search empty state coverage passed through `frontend/src/AppProductUiBoundary.test.ts`, `frontend/src/companionSelector.test.ts`, and the full frontend test run.
+- Local Artoria and Anya companion availability passed without copying or committing private assets: `~/.petdex/pets/{artoria,anya-2}` and `~/.codex/pets/{artoria,anya-2}` all had `pet.json` plus non-empty `spritesheet.webp`; `src-tauri` has a real-asset smoke test for those installed roots; selector view-model tests cover selected local companions without fallback.
+- Artoria packaged launch path was exercised through the existing persisted selection `codex:artoria`. Anya was covered by real local asset metadata and selector/store tests rather than a screenshot, because Computer Use screenshot/text extraction was unavailable in this session.
+- After exiting the smoke app process, the descriptor file remained present but was stale: the old port no longer listened, `lsof -p 615` was empty, and `pnpm debug:discover --descriptor /private/tmp/ai-partner-dmg-smoke.p8WjQ0/runtime-descriptor-active.json` failed with `descriptor_stale: Runtime descriptor process is not alive.`
+- No release blocker was found during the internal beta packaged DMG smoke.
 
 Readiness evidence is complete in:
 
@@ -47,10 +52,11 @@ Readiness evidence is complete in:
 - Developer ID signing, notarization, stapling, and public Gatekeeper distribution have not been completed.
 - This DMG is suitable for this machine and internal testing. It is not a public distribution package.
 - External multi-display behavior is a roadmap/risk note, not an MVP guarantee.
+- Current Codex Computer Use permissions were still pending for Accessibility and Screen Recording, so this smoke could not rely on automated screenshots or WebView text extraction as proof. The evidence uses package metadata, runtime descriptor permissions, localhost endpoint discovery, debug event acceptance, `lsof` process/port checks, and existing renderer/selector/real-asset tests.
+- macOS process/window automation is permission-sensitive in this environment: sandboxed `pgrep`, `ps`, localhost probing, and `hdiutil` operations can fail with permission or device errors unless run with explicit local approval. Treat those as test-harness limits, not product runtime failures.
 
 ## Explicitly non-MVP
 
-- Partner search or partner switching.
 - Marketplace or asset marketplace flows.
 - Multi-asset management UI.
 - External multi-display experience.
