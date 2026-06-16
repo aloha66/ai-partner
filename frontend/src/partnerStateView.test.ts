@@ -5,6 +5,8 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   idlePartnerState,
+  interactiveCardView,
+  resolveAuthorizationDecision,
   partnerStateDisplay
 } from "./partnerStateView";
 
@@ -65,6 +67,79 @@ describe("partner state display", () => {
       sourceLabel: "codex",
       connectionLabel: "degraded",
       canClearError: true
+    });
+  });
+
+  it("renders a running status card with context and source details", () => {
+    expect(
+      interactiveCardView({
+        ...idlePartnerState,
+        workflowState: "running",
+        runId: "run_debug_1",
+        activeRunId: "run_debug_1",
+        source: "codex-wrapper",
+        message: "正在执行 pnpm test",
+        contextPath: "/Users/aloha66/code/ai-partner",
+        cardTitle: "Running command"
+      })
+    ).toEqual({
+      visible: true,
+      variant: "status",
+      tone: "active",
+      title: "Running command",
+      statusText: "正在执行 pnpm test",
+      contextPath: "/Users/aloha66/code/ai-partner",
+      sourceLabel: "Codex",
+      action: null
+    });
+  });
+
+  it("renders a pending authorization card and resolves local button decisions", () => {
+    const snapshot: PartnerStateSnapshot = {
+      ...idlePartnerState,
+      workflowState: "waiting",
+      runId: "run_auth_1",
+      activeRunId: "run_auth_1",
+      source: "claude-hook",
+      message: "需要授权执行 git status",
+      contextPath: "/Users/aloha66/code/ai-partner",
+      authorization: {
+        kind: "command",
+        id: "auth_git_status",
+        title: "Allow command?",
+        description: "git status",
+        status: "pending"
+      }
+    };
+    const authorization = snapshot.authorization;
+    expect(authorization).toBeDefined();
+
+    expect(interactiveCardView(snapshot)).toMatchObject({
+      visible: true,
+      variant: "authorization",
+      tone: "attention",
+      title: "Allow command?",
+      statusText: "git status",
+      contextPath: "/Users/aloha66/code/ai-partner",
+      sourceLabel: "Claude Hook",
+      action: {
+        id: "auth_git_status",
+        kind: "command",
+        status: "pending",
+        allowLabel: "Allow",
+        denyLabel: "Deny"
+      }
+    });
+
+    expect(resolveAuthorizationDecision(authorization!, "allow")).toMatchObject({
+      id: "auth_git_status",
+      status: "allowed",
+      decidedAt: expect.stringMatching(/^20/)
+    });
+    expect(resolveAuthorizationDecision(authorization!, "deny")).toMatchObject({
+      id: "auth_git_status",
+      status: "denied",
+      decidedAt: expect.stringMatching(/^20/)
     });
   });
 

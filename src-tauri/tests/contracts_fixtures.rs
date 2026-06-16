@@ -17,6 +17,9 @@ struct WorkflowEventWire {
     workflow_state: WorkflowState,
     timestamp: String,
     message: Option<String>,
+    card_title: Option<String>,
+    context_path: Option<String>,
+    authorization: Option<WorkflowAuthorization>,
     code_context_allowed: bool,
 }
 
@@ -26,6 +29,34 @@ enum WorkflowSource {
     Cli,
     CodexWrapper,
     DemoScript,
+    ClaudeHook,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum AuthorizationKind {
+    Command,
+    Tool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum AuthorizationStatus {
+    Pending,
+    Allowed,
+    Denied,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[allow(dead_code)]
+struct WorkflowAuthorization {
+    kind: AuthorizationKind,
+    id: String,
+    title: Option<String>,
+    description: String,
+    status: AuthorizationStatus,
+    decided_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,6 +82,11 @@ struct PartnerStateSnapshot {
     active_run_id: Option<String>,
     source: Option<WorkflowSource>,
     message: Option<String>,
+    #[serde(rename = "cardTitle")]
+    card_title: Option<String>,
+    #[serde(rename = "contextPath")]
+    context_path: Option<String>,
+    authorization: Option<WorkflowAuthorization>,
     priority: SnapshotPriority,
     updated_at: String,
     paused: bool,

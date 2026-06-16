@@ -23,7 +23,8 @@ export interface SendWorkflowEventResult {
 const contractWorkflowSources = [
   "cli",
   "codex-wrapper",
-  "demo-script"
+  "demo-script",
+  "claude-hook"
 ] as const satisfies readonly WorkflowSource[];
 
 export async function sendWorkflowEvent(
@@ -93,6 +94,9 @@ export function workflowEventPayloadForPost(
     workflow_state: event.workflow_state,
     timestamp: event.timestamp,
     ...(message === undefined ? {} : { message }),
+    ...(event.card_title === undefined ? {} : { card_title: event.card_title }),
+    ...(event.context_path === undefined ? {} : { context_path: event.context_path }),
+    ...(event.authorization === undefined ? {} : { authorization: event.authorization }),
     code_context_allowed: false
   };
 }

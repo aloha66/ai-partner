@@ -45,7 +45,8 @@ const layout = {
   menuMaxHeight: cssPxVar("t8-menu-max-height"),
   selectorWidth: cssPxVar("t8-selector-width"),
   selectorMaxHeight: cssPxVar("t8-selector-max-height"),
-  statusPillWidth: cssPxVar("t8-status-pill-width")
+  statusPillWidth: cssPxVar("t8-status-pill-width"),
+  interactionCardWidth: cssPxVar("t8-interaction-card-width")
 };
 
 describe("default 520x360 renderer layout sanity", () => {
@@ -114,6 +115,16 @@ describe("default 520x360 renderer layout sanity", () => {
     const panelInnerWidth = layout.panelWidth - 2 * layout.panelPadding - 2 * layout.panelBorder;
 
     expect(conservativeTextWidth + iconAndGapBudget).toBeLessThanOrEqual(panelInnerWidth);
+  });
+
+  it("keeps the interaction card anchored as an overlay inside the default window", () => {
+    const overlayHorizontalBudget = layout.spriteWidth + layout.interactionCardWidth + 34 + 18;
+
+    expect(layout.interactionCardWidth).toBeLessThan(layout.windowWidth);
+    expect(overlayHorizontalBudget).toBeLessThanOrEqual(layout.windowWidth);
+    expect(styles).toMatch(/\.interaction-card\s*\{[^}]*position:\s*absolute;/s);
+    expect(styles).toMatch(/\.interaction-card\s*\{[^}]*max-height:\s*calc\(100vh - 24px\);/s);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*460px\)\s*\{[\s\S]*\.interaction-card\s*\{[^}]*width:\s*calc\(100vw - 16px\);/s);
   });
 
   it("declares light, dark, and system theme paths with CSS variables", () => {

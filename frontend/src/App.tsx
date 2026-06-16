@@ -17,12 +17,13 @@ import {
   ScanLine,
   ShieldCheck,
   Sparkles,
+  LoaderCircle,
   SunMoon,
   UserRound,
   X,
   XCircle
 } from "lucide-react";
-import { type AnimationIntent } from "@ai-partner/contracts";
+import { type AnimationIntent, type WorkflowAuthorization } from "@ai-partner/contracts";
 import { type PhysicalHorizontalDirection } from "@ai-partner/resolver";
 import {
   applyM0WindowDefaults,
@@ -51,8 +52,10 @@ import {
 } from "./tauriWindow";
 import {
   idlePartnerState,
+  interactiveCardView,
   partnerStateDisplay
 } from "./partnerStateView";
+import { resolveAuthorizationDecision } from "./partnerStateView";
 import {
   resolvePartnerIntent
 } from "./animationIntentView";
@@ -146,6 +149,52 @@ function readInitialThemePreference(): ThemePreference {
   }
 }
 
+function debugPreviewPartnerState() {
+  if (debugMode !== "visible") {
+    return null;
+  }
+
+  const card = new URLSearchParams(window.location.search).get("card");
+  if (card === "auth") {
+    return {
+      ...idlePartnerState,
+      workflowState: "waiting" as const,
+      runId: "run_preview_auth",
+      activeRunId: "run_preview_auth",
+      source: "claude-hook" as const,
+      message: "需要授权执行命令",
+      cardTitle: "Allow command?",
+      contextPath: "/Users/aloha66/code/ai-partner",
+      authorization: {
+        kind: "command" as const,
+        id: "auth_preview_command",
+        title: "Allow command?",
+        description: "pnpm test",
+        status: "pending" as const
+      },
+      updatedAt: new Date().toISOString(),
+      connection: "ok" as const
+    };
+  }
+
+  if (card === "running") {
+    return {
+      ...idlePartnerState,
+      workflowState: "running" as const,
+      runId: "run_preview_running",
+      activeRunId: "run_preview_running",
+      source: "codex-wrapper" as const,
+      message: "正在执行 pnpm test",
+      cardTitle: "Running command",
+      contextPath: "/Users/aloha66/code/ai-partner",
+      updatedAt: new Date().toISOString(),
+      connection: "ok" as const
+    };
+  }
+
+  return null;
+}
+
 function contextMenuPosition(clientX: number, clientY: number): MenuPosition {
   const viewportWidth = Math.max(window.innerWidth, CONTEXT_MENU_WIDTH_PX + CONTEXT_MENU_MARGIN_PX * 2);
   const viewportHeight = Math.max(window.innerHeight, CONTEXT_MENU_MAX_HEIGHT_PX + CONTEXT_MENU_MARGIN_PX * 2);
@@ -179,7 +228,10 @@ export function App() {
   const [status, setStatus] = useState<SpikeStatus | null>(null);
   const [clickThrough, setClickThrough] = useState(false);
   const [recoveryStatus, setRecoveryStatus] = useState("auto");
-  const [partnerState, setPartnerState] = useState(idlePartnerState);
+  const [partnerState, setPartnerState] = useState(() => debugPreviewPartnerState() ?? idlePartnerState);
+  const [localAuthorizationDecisions, setLocalAuthorizationDecisions] = useState<
+    Record<string, WorkflowAuthorization>
+  >({});
   const [stateCommandStatus, setStateCommandStatus] = useState("ok");
   const [queuedAnimations, setQueuedAnimations] = useState<AnimationIntent["queued"]>([]);
   const recoveryTimerRef = useRef<number | null>(null);
@@ -231,6 +283,21 @@ export function App() {
     [partnerState, physicalState, queuedAnimations, activeCompanion.capabilities, dragDirection]
   );
   const stateDisplay = partnerStateDisplay(partnerState);
+  const displayedPartnerState = useMemo(() => {
+    const authorization = partnerState.authorization;
+    if (!authorization) {
+      return partnerState;
+    }
+    const localDecision = localAuthorizationDecisions[authorization.id];
+    if (!localDecision) {
+      return partnerState;
+    }
+    return {
+      ...partnerState,
+      authorization: localDecision
+    };
+  }, [localAuthorizationDecisions, partnerState]);
+  const interactionCard = interactiveCardView(displayedPartnerState);
   const selectorOptions = useMemo(
     () => companionSelectorOptions(companionCatalog, activeCompanion.id, selectorQuery),
     [companionCatalog, activeCompanion.id, selectorQuery]
@@ -362,6 +429,10 @@ export function App() {
     const startupRevision = stateRevisionRef.current;
 
     void (async () => {
+      if (debugPreviewPartnerState()) {
+        return;
+      }
+
       try {
         const unlisten = await listenPartnerStateChanged((snapshot) => {
           if (!disposed) {
@@ -614,6 +685,19 @@ export function App() {
     setCompanionStatus("fallback");
   }
 
+  function decideAuthorization(choice: "allow" | "deny") {
+    const authorization = displayedPartnerState.authorization;
+    if (!authorization || authorization.status !== "pending") {
+      return;
+    }
+
+    const decision = resolveAuthorizationDecision(authorization, choice);
+    setLocalAuthorizationDecisions((current) => ({
+      ...current,
+      [authorization.id]: decision
+    }));
+  }
+
   function openContextMenu(event: React.MouseEvent<HTMLElement>) {
     if (event.target === event.currentTarget) {
       closeContextMenu();
@@ -665,7 +749,11 @@ export function App() {
         }
       }}
     >
-      <section className="companion-zone" aria-label="M0 window spike" onContextMenu={openContextMenu}>
+      <section
+        className={`companion-zone ${interactionCard.visible ? "has-interaction-card" : ""}`}
+        aria-label="M0 window spike"
+        onContextMenu={openContextMenu}
+      >
         <PartnerRenderer
           intent={animationIntent}
           frameIndex={frameIndex}
@@ -683,6 +771,58 @@ export function App() {
           <span>{stateDisplay.pausedLabel}</span>
           <strong>{activeCompanion.fallbackUsed || atlasFailed ? "fallback" : stateDisplay.workflowLabel}</strong>
         </div>
+
+        {interactionCard.visible ? (
+          <section
+            className={`interaction-card is-${interactionCard.variant} tone-${interactionCard.tone}`}
+            aria-label="workflow interaction card"
+            aria-live="polite"
+          >
+            <header className="interaction-card-header">
+              <span className="state-indicator" aria-hidden>
+                {interactionCard.tone === "active" || interactionCard.tone === "attention" ? (
+                  <LoaderCircle size={14} />
+                ) : null}
+              </span>
+              <div>
+                <h2>{interactionCard.title}</h2>
+                <p>{interactionCard.statusText}</p>
+              </div>
+              <strong>{interactionCard.sourceLabel}</strong>
+            </header>
+            {interactionCard.contextPath ? (
+              <div className="interaction-context" title={interactionCard.contextPath}>
+                {interactionCard.contextPath}
+              </div>
+            ) : null}
+            {interactionCard.action ? (
+              <div className="interaction-actions">
+                {interactionCard.action.status === "pending" ? (
+                  <>
+                    <button
+                      className="decision-button deny"
+                      type="button"
+                      onClick={() => decideAuthorization("deny")}
+                    >
+                      {interactionCard.action.denyLabel}
+                    </button>
+                    <button
+                      className="decision-button allow"
+                      type="button"
+                      onClick={() => decideAuthorization("allow")}
+                    >
+                      {interactionCard.action.allowLabel}
+                    </button>
+                  </>
+                ) : (
+                  <div className="decision-result">
+                    {interactionCard.action.status === "allowed" ? "Allowed locally" : "Denied locally"}
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
       </section>
 
       {contextMenuOpen ? (

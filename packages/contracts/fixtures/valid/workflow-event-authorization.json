@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "ai-partner.workflow-event.v1",
+  "event_id": "evt_20260602_auth_0001",
+  "source": "claude-hook",
+  "run_id": "run_auth_abc123",
+  "workflow_state": "waiting",
+  "timestamp": "2026-06-02T00:00:00Z",
+  "message": "需要授权执行命令",
+  "card_title": "Allow command?",
+  "context_path": "/Users/aloha66/code/ai-partner",
+  "authorization": {
+    "kind": "command",
+    "id": "auth_git_status",
+    "title": "Allow command?",
+    "description": "git status",
+    "status": "pending"
+  },
+  "code_context_allowed": false
+}

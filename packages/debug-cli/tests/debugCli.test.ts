@@ -240,6 +240,39 @@ describe("workflow event sender", () => {
     }
   });
 
+  it("can create a pending authorization event for card UI smoke checks", () => {
+    const event = createWorkflowEvent({
+      state: "waiting",
+      runId: "run_auth_debug",
+      timestamp: new Date("2026-06-03T00:00:00Z"),
+      message: "needs approval",
+      contextPath: "/Users/aloha66/code/ai-partner",
+      source: "claude-hook",
+      authorization: {
+        kind: "command",
+        id: "auth_debug_status",
+        title: "Allow command?",
+        description: "git status",
+        status: "pending"
+      }
+    });
+
+    expect(event).toMatchObject({
+      source: "claude-hook",
+      workflow_state: "waiting",
+      context_path: "/Users/aloha66/code/ai-partner",
+      authorization: {
+        kind: "command",
+        id: "auth_debug_status",
+        title: "Allow command?",
+        description: "git status",
+        status: "pending"
+      },
+      code_context_allowed: false
+    });
+    expect(() => assertNoForbiddenFields(event)).not.toThrow();
+  });
+
   it("reports bad token responses and connection failures", async () => {
     const descriptor = runtimeDescriptor({
       port: 43172,

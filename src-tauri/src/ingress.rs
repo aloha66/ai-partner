@@ -39,7 +39,10 @@ const FORBIDDEN_FIELDS: &[&str] = &[
     "screen_text",
 ];
 const ALLOWED_EVENT_FIELDS: &[&str] = &[
+    "authorization",
+    "card_title",
     "code_context_allowed",
+    "context_path",
     "event_id",
     "message",
     "run_id",
@@ -1043,6 +1046,9 @@ mod tests {
             workflow_state,
             timestamp: "2026-06-03T00:00:00Z".to_string(),
             message: Some("working".to_string()),
+            card_title: None,
+            context_path: None,
+            authorization: None,
             code_context_allowed: false,
         }
     }
