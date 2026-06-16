@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::ErrorKind;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager};
@@ -170,6 +171,76 @@ pub fn select_companion(
     companion_id: String,
 ) -> Result<CompanionCatalog, String> {
     store.select(&companion_id)
+}
+
+#[cfg(test)]
+fn local_pets_directory(store: &CompanionStore, source: &str) -> Result<PathBuf, String> {
+    let inner = store.inner.lock().expect("companion mutex poisoned");
+    let (source_directory, directory) = local_pets_paths(&inner.home_dir, source)?;
+    reject_symlinked_pets_directory(&source_directory, &directory)?;
+    Ok(directory)
+}
+
+pub fn ensure_local_pets_directory(
+    store: &CompanionStore,
+    source: &str,
+) -> Result<PathBuf, String> {
+    let inner = store.inner.lock().expect("companion mutex poisoned");
+    let (source_directory, directory) = local_pets_paths(&inner.home_dir, source)?;
+    reject_symlinked_pets_directory(&source_directory, &directory)?;
+    create_plain_directory(&source_directory, "pets source directory")?;
+    create_plain_directory(&directory, "pets directory")?;
+    reject_symlinked_pets_directory(&source_directory, &directory)?;
+
+    let source_real = fs::canonicalize(&source_directory).map_err(|error| error.to_string())?;
+    let directory_real = fs::canonicalize(&directory).map_err(|error| error.to_string())?;
+    if !directory_real.starts_with(source_real) {
+        return Err("pets directory resolves outside companion source".to_string());
+    }
+    Ok(directory_real)
+}
+
+fn local_pets_paths(home_dir: &Path, source: &str) -> Result<(PathBuf, PathBuf), String> {
+    let source_directory = match source {
+        "petdex" => home_dir.join(".petdex"),
+        "codex" => home_dir.join(".codex"),
+        _ => return Err("unknown companion source".to_string()),
+    };
+    let directory = source_directory.join("pets");
+    Ok((source_directory, directory))
+}
+
+fn reject_symlinked_pets_directory(
+    source_directory: &Path,
+    directory: &Path,
+) -> Result<(), String> {
+    reject_existing_symlink(source_directory, "pets source directory cannot be a symlink")?;
+    reject_existing_symlink(directory, "pets directory cannot be a symlink")
+}
+
+fn reject_existing_symlink(path: &Path, symlink_error: &str) -> Result<(), String> {
+    match fs::symlink_metadata(path) {
+        Ok(meta) if meta.file_type().is_symlink() => Err(symlink_error.to_string()),
+        Ok(meta) if meta.is_dir() => Ok(()),
+        Ok(_) => Err(format!("{} must be a directory", path.display())),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+fn create_plain_directory(path: &Path, label: &str) -> Result<(), String> {
+    match fs::symlink_metadata(path) {
+        Ok(meta) if meta.file_type().is_symlink() => {
+            Err(format!("{label} cannot be a symlink"))
+        }
+        Ok(meta) if meta.is_dir() => Ok(()),
+        Ok(_) => Err(format!("{label} must be a directory")),
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            fs::create_dir(path).map_err(|error| error.to_string())?;
+            reject_existing_symlink(path, &format!("{label} cannot be a symlink"))
+        }
+        Err(error) => Err(error.to_string()),
+    }
 }
 
 fn read_settings(app_config_dir: &Path) -> CompanionSettings {
@@ -886,6 +957,90 @@ mod tests {
             .companions
             .iter()
             .any(|companion| companion.id == "petdex:broken" && !companion.valid));
+        let _ = fs::remove_dir_all(temp);
+    }
+
+    #[test]
+    fn local_pets_directory_only_returns_scoped_pet_roots() {
+        let temp = temp_dir("scoped-pets-dir");
+        let home = temp.join("home");
+        let config = temp.join("config");
+        let store = CompanionStore::new(home.clone(), config);
+
+        assert_eq!(
+            local_pets_directory(&store, "petdex").expect("petdex root"),
+            home.join(".petdex").join("pets")
+        );
+        assert_eq!(
+            local_pets_directory(&store, "codex").expect("codex root"),
+            home.join(".codex").join("pets")
+        );
+        assert_eq!(
+            local_pets_directory(&store, "downloads").expect_err("unknown source rejected"),
+            "unknown companion source"
+        );
+        let _ = fs::remove_dir_all(temp);
+    }
+
+    #[test]
+    fn ensure_local_pets_directory_creates_scoped_plain_directories() {
+        let temp = temp_dir("ensure-scoped-pets-dir");
+        let home = temp.join("home");
+        let config = temp.join("config");
+        fs::create_dir_all(&home).expect("home dir write");
+        let store = CompanionStore::new(home.clone(), config);
+
+        assert_eq!(
+            ensure_local_pets_directory(&store, "codex").expect("codex pets dir"),
+            fs::canonicalize(home.join(".codex").join("pets")).expect("pets dir real path")
+        );
+        assert!(home.join(".codex").is_dir());
+        assert!(home.join(".codex").join("pets").is_dir());
+        let _ = fs::remove_dir_all(temp);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_pets_directory_rejects_symlinked_pet_root() {
+        use std::os::unix::fs::symlink;
+
+        let temp = temp_dir("scoped-pets-dir-symlink");
+        let home = temp.join("home");
+        let outside = temp.join("outside");
+        fs::create_dir_all(&outside).expect("outside dir write");
+        fs::create_dir_all(home.join(".petdex")).expect("petdex parent write");
+        symlink(&outside, home.join(".petdex").join("pets")).expect("pets symlink write");
+        let store = CompanionStore::new(home, temp.join("config"));
+
+        assert_eq!(
+            local_pets_directory(&store, "petdex").expect_err("symlink root rejected"),
+            "pets directory cannot be a symlink"
+        );
+        let _ = fs::remove_dir_all(temp);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_pets_directory_rejects_symlinked_source_parent() {
+        use std::os::unix::fs::symlink;
+
+        let temp = temp_dir("scoped-pets-source-symlink");
+        let home = temp.join("home");
+        let outside = temp.join("outside");
+        fs::create_dir_all(&outside).expect("outside dir write");
+        fs::create_dir_all(&home).expect("home dir write");
+        symlink(&outside, home.join(".petdex")).expect("source symlink write");
+        let store = CompanionStore::new(home, temp.join("config"));
+
+        assert_eq!(
+            local_pets_directory(&store, "petdex").expect_err("source symlink rejected"),
+            "pets source directory cannot be a symlink"
+        );
+        assert_eq!(
+            ensure_local_pets_directory(&store, "petdex")
+                .expect_err("ensure source symlink rejected"),
+            "pets source directory cannot be a symlink"
+        );
         let _ = fs::remove_dir_all(temp);
     }
 

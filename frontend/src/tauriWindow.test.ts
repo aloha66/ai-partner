@@ -303,4 +303,39 @@ describe("Tauri state bridge", () => {
       companionId: "petdex:artoria"
     });
   });
+
+  it("opens scoped local pet directories through Rust", async () => {
+    tauriMocks.invoke.mockResolvedValueOnce(undefined);
+    const { openLocalPetsDirectory } = await import("./tauriWindow");
+
+    await expect(openLocalPetsDirectory("codex")).resolves.toBeUndefined();
+    expect(tauriMocks.invoke).toHaveBeenCalledWith("open_local_pets_directory", {
+      source: "codex"
+    });
+  });
+
+  it("quits through the Rust command", async () => {
+    tauriMocks.invoke.mockResolvedValueOnce(undefined);
+    const { quitApp } = await import("./tauriWindow");
+
+    await expect(quitApp()).resolves.toBeUndefined();
+    expect(tauriMocks.invoke).toHaveBeenCalledWith("quit_app");
+  });
+
+  it("can temporarily toggle window focusability for selector search", async () => {
+    const windowApi = {
+      setIgnoreCursorEvents: vi.fn(),
+      setAlwaysOnTop: vi.fn(),
+      setFocusable: vi.fn(),
+      setVisibleOnAllWorkspaces: vi.fn(),
+      setPosition: vi.fn(),
+      outerPosition: vi.fn(),
+      show: vi.fn()
+    };
+    tauriMocks.getCurrentWindow.mockReturnValueOnce(windowApi);
+    const { setWindowFocusable } = await import("./tauriWindow");
+
+    await setWindowFocusable(true);
+    expect(windowApi.setFocusable).toHaveBeenCalledWith(true);
+  });
 });

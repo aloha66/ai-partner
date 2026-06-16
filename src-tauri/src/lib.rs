@@ -6,7 +6,9 @@ mod companions;
 mod ingress;
 mod state;
 
-use companions::{get_catalog, select_companion, CompanionCatalog, CompanionStore};
+use companions::{
+    ensure_local_pets_directory, get_catalog, select_companion, CompanionCatalog, CompanionStore,
+};
 use state::{
     PartnerStateSnapshot, PartnerStateStore, WorkflowEventWire, PARTNER_STATE_CHANGED_EVENT,
 };
@@ -107,6 +109,27 @@ fn set_selected_companion(
     select_companion(&store, companion_id)
 }
 
+#[tauri::command]
+fn open_local_pets_directory(store: State<'_, CompanionStore>, source: String) -> Result<(), String> {
+    let directory = ensure_local_pets_directory(&store, &source)?;
+    std::process::Command::new("open")
+        .arg(&directory)
+        .status()
+        .map_err(|error| error.to_string())
+        .and_then(|status| {
+            if status.success() {
+                Ok(())
+            } else {
+                Err(format!("open exited with status {status}"))
+            }
+        })
+}
+
+#[tauri::command]
+fn quit_app(app: AppHandle) {
+    app.exit(0);
+}
+
 fn emit_state_transition(
     app: &AppHandle,
     store: &PartnerStateStore,
@@ -159,7 +182,9 @@ pub fn run() {
             resume,
             clear_error,
             list_local_companions,
-            set_selected_companion
+            set_selected_companion,
+            open_local_pets_directory,
+            quit_app
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
