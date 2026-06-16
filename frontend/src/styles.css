@@ -143,9 +143,21 @@ button {
 }
 
 .companion-zone.has-interaction-card {
-  justify-items: start;
-  padding-left: 18px;
-  padding-right: calc(var(--t8-interaction-card-width) + 34px);
+  min-width: 0;
+  justify-items: center;
+  align-content: start;
+  padding: 6px 0 126px;
+  overflow: hidden;
+}
+
+.companion-zone.has-interaction-card .bubble,
+.companion-zone.has-interaction-card .status-pill {
+  display: none;
+}
+
+.companion-zone.has-interaction-card .partner {
+  transform: scale(0.78);
+  transform-origin: top center;
 }
 
 .bubble {
@@ -289,11 +301,11 @@ button {
 .interaction-card {
   box-sizing: border-box;
   position: absolute;
-  right: 8px;
+  left: 8px;
   bottom: 8px;
   z-index: 12;
   width: min(var(--t8-interaction-card-width), calc(100vw - 24px));
-  max-height: calc(100vh - 24px);
+  max-height: min(122px, calc(100vh - 24px));
   padding: 10px;
   border: 1px solid rgb(255 255 255 / 0.14);
   border-radius: 8px;
@@ -431,6 +443,11 @@ button {
 
 .decision-button:hover {
   filter: brightness(1.08);
+}
+
+.decision-button:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
 }
 
 .decision-result {
@@ -909,16 +926,12 @@ button {
     min-width: 0;
   }
 
-  .companion-zone.has-interaction-card {
-    justify-items: center;
-    align-content: start;
-    padding: 8px 0 calc(var(--t8-sprite-bottom-safe-area) + 116px);
-  }
-
   .interaction-card {
+    left: 4px;
     right: 4px;
     bottom: 4px;
-    width: calc(100vw - 16px);
+    width: auto;
+    gap: 6px;
   }
 
   .spike-panel {

@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   idlePartnerState,
   interactiveCardView,
+  localAuthorizationDecisionKey,
   resolveAuthorizationDecision,
   partnerStateDisplay
 } from "./partnerStateView";
@@ -106,7 +107,7 @@ describe("partner state display", () => {
       authorization: {
         kind: "command",
         id: "auth_git_status",
-        title: "Allow command?",
+        title: "Command approval preview",
         description: "git status",
         status: "pending"
       }
@@ -118,16 +119,16 @@ describe("partner state display", () => {
       visible: true,
       variant: "authorization",
       tone: "attention",
-      title: "Allow command?",
+      title: "Command approval preview",
       statusText: "git status",
       contextPath: "/Users/aloha66/code/ai-partner",
-      sourceLabel: "Claude Hook",
+      sourceLabel: "Hook event",
       action: {
         id: "auth_git_status",
         kind: "command",
         status: "pending",
-        allowLabel: "Allow",
-        denyLabel: "Deny"
+        allowLabel: "Preview allow",
+        denyLabel: "Preview deny"
       }
     });
 
@@ -141,6 +142,30 @@ describe("partner state display", () => {
       status: "denied",
       decidedAt: expect.stringMatching(/^20/)
     });
+  });
+
+  it("scopes local authorization decisions to a concrete run snapshot", () => {
+    const first: PartnerStateSnapshot = {
+      ...idlePartnerState,
+      workflowState: "waiting",
+      runId: "run_auth_1",
+      activeRunId: "run_auth_1",
+      updatedAt: "2026-06-03T00:00:00Z",
+      authorization: {
+        kind: "command",
+        id: "auth_reused_id",
+        description: "pnpm test",
+        status: "pending"
+      }
+    };
+    const second: PartnerStateSnapshot = {
+      ...first,
+      runId: "run_auth_2",
+      activeRunId: "run_auth_2",
+      updatedAt: "2026-06-03T00:00:01Z"
+    };
+
+    expect(localAuthorizationDecisionKey(first)).not.toBe(localAuthorizationDecisionKey(second));
   });
 
 });

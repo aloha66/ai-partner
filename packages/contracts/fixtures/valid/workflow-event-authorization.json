@@ -6,12 +6,12 @@
   "workflow_state": "waiting",
   "timestamp": "2026-06-02T00:00:00Z",
   "message": "需要授权执行命令",
-  "card_title": "Allow command?",
+  "card_title": "Command approval preview",
   "context_path": "/Users/aloha66/code/ai-partner",
   "authorization": {
     "kind": "command",
     "id": "auth_git_status",
-    "title": "Allow command?",
+    "title": "Command approval preview",
     "description": "git status",
     "status": "pending"
   },

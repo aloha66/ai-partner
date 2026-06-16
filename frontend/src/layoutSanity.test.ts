@@ -118,13 +118,27 @@ describe("default 520x360 renderer layout sanity", () => {
   });
 
   it("keeps the interaction card anchored as an overlay inside the default window", () => {
-    const overlayHorizontalBudget = layout.spriteWidth + layout.interactionCardWidth + 34 + 18;
+    const scaledSpriteHeight = layout.spriteHeight * 0.78;
+    const cardBottomBudget = 126;
 
     expect(layout.interactionCardWidth).toBeLessThan(layout.windowWidth);
-    expect(overlayHorizontalBudget).toBeLessThanOrEqual(layout.windowWidth);
+    expect(scaledSpriteHeight + cardBottomBudget).toBeLessThanOrEqual(layout.windowHeight);
     expect(styles).toMatch(/\.interaction-card\s*\{[^}]*position:\s*absolute;/s);
-    expect(styles).toMatch(/\.interaction-card\s*\{[^}]*max-height:\s*calc\(100vh - 24px\);/s);
-    expect(styles).toMatch(/@media\s*\(max-width:\s*460px\)\s*\{[\s\S]*\.interaction-card\s*\{[^}]*width:\s*calc\(100vw - 16px\);/s);
+    expect(styles).toMatch(/\.interaction-card\s*\{[^}]*left:\s*8px;/s);
+    expect(styles).toMatch(/\.interaction-card\s*\{[^}]*max-height:\s*min\(122px,\s*calc\(100vh - 24px\)\);/s);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*460px\)\s*\{[\s\S]*\.interaction-card\s*\{[^}]*left:\s*4px;[\s\S]*width:\s*auto;/s);
+  });
+
+  it("protects the minimum 380px card layout from companion overlap", () => {
+    const minimumWindowWidth = 380;
+    const mobileCardWidth = minimumWindowWidth - 8;
+    const scaledSpriteWidth = layout.spriteWidth * 0.78;
+
+    expect(mobileCardWidth).toBeLessThanOrEqual(minimumWindowWidth);
+    expect(scaledSpriteWidth).toBeLessThan(mobileCardWidth);
+    expect(styles).toMatch(/\.companion-zone\.has-interaction-card \.bubble,[\s\S]*\.companion-zone\.has-interaction-card \.status-pill\s*\{[\s\S]*display:\s*none;/s);
+    expect(styles).toMatch(/\.companion-zone\.has-interaction-card \.partner\s*\{[\s\S]*transform:\s*scale\(0\.78\);/s);
+    expect(styles).toMatch(/\.interaction-card\s*\{[\s\S]*max-height:\s*min\(122px,\s*calc\(100vh - 24px\)\);/s);
   });
 
   it("declares light, dark, and system theme paths with CSS variables", () => {

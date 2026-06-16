@@ -3,7 +3,7 @@ import type { RequestOptions } from "node:http";
 import type { RuntimeDescriptor, WorkflowEventWire, WorkflowSource } from "@ai-partner/contracts";
 import { WORKFLOW_EVENT_SCHEMA_VERSION, defaultPostTimeoutMs } from "./constants.js";
 import { DebugCliError } from "./errors.js";
-import { assertNoForbiddenFields, normalizeMessage } from "./workflowEvent.js";
+import { assertNoForbiddenFields, normalizeAuthorization, normalizeMessage } from "./workflowEvent.js";
 
 export interface SendWorkflowEventOptions {
   timeoutMs?: number;
@@ -86,6 +86,7 @@ export function workflowEventPayloadForPost(
   }
 
   const message = normalizeMessage(event.message);
+  const authorization = normalizeAuthorization(event.authorization);
   return {
     schemaVersion: event.schemaVersion,
     event_id: event.event_id,
@@ -96,7 +97,7 @@ export function workflowEventPayloadForPost(
     ...(message === undefined ? {} : { message }),
     ...(event.card_title === undefined ? {} : { card_title: event.card_title }),
     ...(event.context_path === undefined ? {} : { context_path: event.context_path }),
-    ...(event.authorization === undefined ? {} : { authorization: event.authorization }),
+    ...(authorization === undefined ? {} : { authorization }),
     code_context_allowed: false
   };
 }

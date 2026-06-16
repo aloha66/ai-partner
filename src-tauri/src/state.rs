@@ -44,7 +44,7 @@ pub enum AuthorizationStatus {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct WorkflowAuthorization {
     pub kind: AuthorizationKind,
     pub id: String,
@@ -325,7 +325,7 @@ impl WorkflowEventWire {
             return Err("code_context_allowed must be false".to_string());
         }
         if let Some(message) = &self.message {
-            validate_short_text(message, "message", 160)?;
+            validate_message_text(message, 160)?;
         }
         if let Some(card_title) = &self.card_title {
             validate_short_text(card_title, "card_title", 80)?;
@@ -363,6 +363,16 @@ fn validate_short_text(value: &str, field: &str, max_chars: usize) -> Result<(),
     }
     if value.contains('\n') || value.contains('\r') {
         return Err(format!("{field} must not contain newlines"));
+    }
+    Ok(())
+}
+
+fn validate_message_text(value: &str, max_chars: usize) -> Result<(), String> {
+    if value.chars().count() > max_chars {
+        return Err(format!("message must be {max_chars} chars or fewer"));
+    }
+    if value.contains('\n') || value.contains('\r') {
+        return Err("message must not contain newlines".to_string());
     }
     Ok(())
 }
@@ -771,6 +781,19 @@ mod tests {
     }
 
     #[test]
+    fn accepts_empty_message_for_v1_compatibility() {
+        let store = PartnerStateStore::new(Duration::from_millis(1));
+        let mut empty_message = event("run_empty_message", WorkflowState::Reading);
+        empty_message.message = Some(String::new());
+
+        let transition = store
+            .apply_workflow_event(empty_message)
+            .expect("empty message is schema-valid v1 payload");
+
+        assert_eq!(transition.snapshot.message.as_deref(), Some(""));
+    }
+
+    #[test]
     fn rejects_bad_schema_version_and_contract_ids() {
         let mut bad_version = event("run_alpha", WorkflowState::Reading);
         bad_version.schema_version = "ai-partner.workflow-event.v2".to_string();
@@ -799,5 +822,30 @@ mod tests {
         long_message.message = Some("a".repeat(161));
 
         assert_event_rejected(long_message, "160 chars");
+    }
+
+    #[test]
+    fn rejects_unknown_authorization_fields() {
+        let raw = serde_json::json!({
+            "schemaVersion": WORKFLOW_EVENT_SCHEMA_VERSION,
+            "event_id": "evt_auth_unknown",
+            "source": "claude-hook",
+            "run_id": "run_auth_unknown",
+            "workflow_state": "waiting",
+            "timestamp": "2026-06-03T00:00:00Z",
+            "authorization": {
+                "kind": "command",
+                "id": "auth_unknown",
+                "description": "git status",
+                "status": "pending",
+                "token": "secret"
+            },
+            "code_context_allowed": false
+        });
+
+        assert!(
+            serde_json::from_value::<WorkflowEventWire>(raw).is_err(),
+            "authorization extras must not be silently dropped"
+        );
     }
 }

@@ -124,7 +124,7 @@ function normalizeShortText(
   return value;
 }
 
-function normalizeAuthorization(
+export function normalizeAuthorization(
   authorization: WorkflowAuthorization | undefined
 ): WorkflowAuthorization | undefined {
   if (authorization === undefined) {

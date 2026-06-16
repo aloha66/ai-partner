@@ -53,6 +53,7 @@ import {
 import {
   idlePartnerState,
   interactiveCardView,
+  localAuthorizationDecisionKey,
   partnerStateDisplay
 } from "./partnerStateView";
 import { resolveAuthorizationDecision } from "./partnerStateView";
@@ -163,12 +164,12 @@ function debugPreviewPartnerState() {
       activeRunId: "run_preview_auth",
       source: "claude-hook" as const,
       message: "需要授权执行命令",
-      cardTitle: "Allow command?",
+      cardTitle: "Command approval preview",
       contextPath: "/Users/aloha66/code/ai-partner",
       authorization: {
         kind: "command" as const,
         id: "auth_preview_command",
-        title: "Allow command?",
+        title: "Command approval preview",
         description: "pnpm test",
         status: "pending" as const
       },
@@ -288,7 +289,7 @@ export function App() {
     if (!authorization) {
       return partnerState;
     }
-    const localDecision = localAuthorizationDecisions[authorization.id];
+    const localDecision = localAuthorizationDecisions[localAuthorizationDecisionKey(partnerState)];
     if (!localDecision) {
       return partnerState;
     }
@@ -298,6 +299,7 @@ export function App() {
     };
   }, [localAuthorizationDecisions, partnerState]);
   const interactionCard = interactiveCardView(displayedPartnerState);
+  const actionableInteractionCard = interactionCard.action?.status === "pending";
   const selectorOptions = useMemo(
     () => companionSelectorOptions(companionCatalog, activeCompanion.id, selectorQuery),
     [companionCatalog, activeCompanion.id, selectorQuery]
@@ -343,6 +345,20 @@ export function App() {
     setWindowFocusable(false).catch(() => undefined);
     return undefined;
   }, [selectorOpen]);
+
+  useEffect(() => {
+    if (selectorOpen) {
+      return undefined;
+    }
+    if (actionableInteractionCard) {
+      setWindowFocusable(true).catch(() => undefined);
+      return () => {
+        setWindowFocusable(false).catch(() => undefined);
+      };
+    }
+    setWindowFocusable(false).catch(() => undefined);
+    return undefined;
+  }, [actionableInteractionCard, selectorOpen]);
 
   useEffect(() => {
     if (!selectorOpen && !contextMenuOpen) {
@@ -694,7 +710,7 @@ export function App() {
     const decision = resolveAuthorizationDecision(authorization, choice);
     setLocalAuthorizationDecisions((current) => ({
       ...current,
-      [authorization.id]: decision
+      [localAuthorizationDecisionKey(displayedPartnerState)]: decision
     }));
   }
 
@@ -816,7 +832,7 @@ export function App() {
                   </>
                 ) : (
                   <div className="decision-result">
-                    {interactionCard.action.status === "allowed" ? "Allowed locally" : "Denied locally"}
+                    {interactionCard.action.status === "allowed" ? "Preview allowed only" : "Preview denied only"}
                   </div>
                 )}
               </div>

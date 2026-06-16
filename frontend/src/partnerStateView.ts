@@ -42,14 +42,14 @@ const sourceLabels: Record<WorkflowSource, string> = {
   cli: "debug cli",
   "codex-wrapper": "codex",
   "demo-script": "demo",
-  "claude-hook": "Claude Hook"
+  "claude-hook": "hook event"
 };
 
 const cardSourceLabels: Record<WorkflowSource, string> = {
   cli: "Debug CLI",
   "codex-wrapper": "Codex",
   "demo-script": "Demo",
-  "claude-hook": "Claude Hook"
+  "claude-hook": "Hook event"
 };
 
 export interface PartnerStateDisplay {
@@ -118,8 +118,8 @@ export function interactiveCardView(snapshot: PartnerStateSnapshot | null): Inte
         id: authorization.id,
         kind: authorization.kind,
         status: authorization.status,
-        allowLabel: "Allow",
-        denyLabel: "Deny"
+        allowLabel: "Preview allow",
+        denyLabel: "Preview deny"
       }
     };
   }
@@ -162,6 +162,18 @@ export function resolveAuthorizationDecision(
     status: choice === "allow" ? "allowed" : "denied",
     decidedAt: now.toISOString()
   };
+}
+
+export function localAuthorizationDecisionKey(snapshot: PartnerStateSnapshot): string {
+  const authorization = snapshot.authorization;
+  if (!authorization) {
+    return "none";
+  }
+  return [
+    snapshot.activeRunId ?? snapshot.runId ?? "no-run",
+    snapshot.updatedAt,
+    authorization.id
+  ].join(":");
 }
 
 function statusTitle(state: WorkflowState): string {

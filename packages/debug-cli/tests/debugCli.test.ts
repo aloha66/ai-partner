@@ -251,7 +251,7 @@ describe("workflow event sender", () => {
       authorization: {
         kind: "command",
         id: "auth_debug_status",
-        title: "Allow command?",
+        title: "Command approval preview",
         description: "git status",
         status: "pending"
       }
@@ -264,7 +264,7 @@ describe("workflow event sender", () => {
       authorization: {
         kind: "command",
         id: "auth_debug_status",
-        title: "Allow command?",
+        title: "Command approval preview",
         description: "git status",
         status: "pending"
       },
@@ -339,6 +339,29 @@ describe("workflow event sender", () => {
       timestamp: "2026-06-03T00:00:00.000Z",
       code_context_allowed: false
     });
+  });
+
+  it("validates authorization fields when posting a caller-provided event", async () => {
+    const event = {
+      ...createWorkflowEvent({
+        state: "waiting",
+        runId: "run_auth_direct_post",
+        timestamp: new Date("2026-06-03T00:00:00Z")
+      }),
+      authorization: {
+        kind: "command",
+        id: "auth_direct_post",
+        description: "git status\ncat secret",
+        status: "pending"
+      }
+    };
+
+    await expectDebugCliError(
+      sendWorkflowEvent(runtimeDescriptor({ port: 43172 }), event, {
+        post: async () => ({ status: 202, body: "{}" })
+      }),
+      "invalid_message"
+    );
   });
 
   it("allows codex-wrapper events only when the caller opts into that source", async () => {
