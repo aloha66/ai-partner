@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { WorkflowEventWire } from "@ai-partner/contracts";
+import type {
+  WorkflowAuthorization,
+  WorkflowEventWire,
+  WorkflowSource
+} from "@ai-partner/contracts";
 import {
   debugWorkflowStates,
   forbiddenWorkflowPayloadFields,
@@ -14,6 +18,10 @@ export interface CreateWorkflowEventOptions {
   eventId?: string;
   timestamp?: Date;
   message?: string;
+  source?: WorkflowSource;
+  cardTitle?: string;
+  contextPath?: string;
+  authorization?: WorkflowAuthorization;
 }
 
 export function createWorkflowEvent(options: CreateWorkflowEventOptions): WorkflowEventWire {
@@ -27,14 +35,20 @@ export function createWorkflowEvent(options: CreateWorkflowEventOptions): Workfl
   assertContractId(eventId, "evt_", "event_id");
 
   const message = normalizeMessage(options.message);
+  const cardTitle = normalizeShortText(options.cardTitle, "card title", 80);
+  const contextPath = normalizeShortText(options.contextPath, "context path", 240);
+  const authorization = normalizeAuthorization(options.authorization);
   return {
     schemaVersion: WORKFLOW_EVENT_SCHEMA_VERSION,
     event_id: eventId,
-    source: "cli",
+    source: options.source ?? "cli",
     run_id: runId,
     workflow_state: options.state,
     timestamp: (options.timestamp ?? new Date()).toISOString(),
     ...(message === undefined ? {} : { message }),
+    ...(cardTitle === undefined ? {} : { card_title: cardTitle }),
+    ...(contextPath === undefined ? {} : { context_path: contextPath }),
+    ...(authorization === undefined ? {} : { authorization }),
     code_context_allowed: false
   };
 }
@@ -88,6 +102,55 @@ export function normalizeMessage(message: string | undefined): string | undefine
     throw new DebugCliError("Workflow event message must be 160 characters or fewer.", "invalid_message");
   }
   return message;
+}
+
+function normalizeShortText(
+  value: string | undefined,
+  label: string,
+  maxLength: number
+): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value.includes("\n") || value.includes("\r")) {
+    throw new DebugCliError(`Workflow event ${label} must not contain newlines.`, "invalid_message");
+  }
+  if ([...value].length > maxLength) {
+    throw new DebugCliError(`Workflow event ${label} must be ${maxLength} characters or fewer.`, "invalid_message");
+  }
+  if (value.length === 0) {
+    throw new DebugCliError(`Workflow event ${label} must not be empty.`, "invalid_message");
+  }
+  return value;
+}
+
+export function normalizeAuthorization(
+  authorization: WorkflowAuthorization | undefined
+): WorkflowAuthorization | undefined {
+  if (authorization === undefined) {
+    return undefined;
+  }
+  if (!["command", "tool"].includes(authorization.kind)) {
+    throw new DebugCliError("Workflow authorization kind is unsupported.", "invalid_authorization");
+  }
+  assertContractId(authorization.id, "auth_", "authorization.id");
+  const title = normalizeShortText(authorization.title, "authorization title", 80);
+  const description = normalizeShortText(
+    authorization.description,
+    "authorization description",
+    160
+  );
+  if (!["pending", "allowed", "denied"].includes(authorization.status)) {
+    throw new DebugCliError("Workflow authorization status is unsupported.", "invalid_authorization");
+  }
+  return {
+    kind: authorization.kind,
+    id: authorization.id,
+    ...(title === undefined ? {} : { title }),
+    description: description ?? authorization.description,
+    status: authorization.status,
+    ...(authorization.decidedAt === undefined ? {} : { decidedAt: authorization.decidedAt })
+  };
 }
 
 function assertContractId(value: string, prefix: string, field: string): void {

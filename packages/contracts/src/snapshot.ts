@@ -1,4 +1,8 @@
-import { type WorkflowSource, type WorkflowState } from "./workflow";
+import {
+  type WorkflowAuthorization,
+  type WorkflowSource,
+  type WorkflowState
+} from "./workflow";
 import { PARTNER_STATE_SNAPSHOT_SCHEMA_VERSION } from "./versions";
 
 export const snapshotPriorities = ["normal", "high"] as const;
@@ -14,6 +18,9 @@ export interface PartnerStateSnapshot {
   activeRunId: string | null;
   source: WorkflowSource | null;
   message?: string;
+  cardTitle?: string;
+  contextPath?: string;
+  authorization?: WorkflowAuthorization;
   priority: SnapshotPriority;
   updatedAt: string;
   paused: boolean;

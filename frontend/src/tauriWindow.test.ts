@@ -114,6 +114,30 @@ describe("Tauri state bridge", () => {
     expect(tauriMocks.invoke).toHaveBeenCalledWith("get_current_state");
   });
 
+  it("applies workflow events through the Rust state command", async () => {
+    const event = {
+      schemaVersion: "ai-partner.workflow-event.v1" as const,
+      event_id: "evt_auth_git_status_allowed",
+      source: "claude-hook" as const,
+      run_id: "run_auth_1",
+      workflow_state: "waiting" as const,
+      timestamp: "2026-06-04T00:00:00Z",
+      authorization: {
+        kind: "command" as const,
+        id: "auth_git_status",
+        description: "git status",
+        status: "allowed" as const,
+        decidedAt: "2026-06-04T00:00:00Z"
+      },
+      code_context_allowed: false as const
+    };
+    tauriMocks.invoke.mockResolvedValueOnce(readingSnapshot);
+    const { applyWorkflowEvent } = await import("./tauriWindow");
+
+    await expect(applyWorkflowEvent(event)).resolves.toEqual(readingSnapshot);
+    expect(tauriMocks.invoke).toHaveBeenCalledWith("apply_workflow_event", { event });
+  });
+
   it("subscribes to partner-state-changed event updates", async () => {
     const { listenPartnerStateChanged } = await import("./tauriWindow");
     const onSnapshot = vi.fn();

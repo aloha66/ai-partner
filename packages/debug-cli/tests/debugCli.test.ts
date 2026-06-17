@@ -42,6 +42,24 @@ describe("CLI args", () => {
       skipEndpointCheck: true
     });
   });
+
+  it("parses resolved authorization flags for manual smoke checks", () => {
+    const args = parseArgs([
+      "send",
+      "waiting",
+      "--auth-id",
+      "auth_debug_status",
+      "--auth-description",
+      "git status",
+      "--auth-status",
+      "allowed",
+      "--auth-decided-at",
+      "2026-06-03T00:00:00Z"
+    ]);
+
+    expect(args.flags.get("auth-status")).toBe("allowed");
+    expect(args.flags.get("auth-decided-at")).toBe("2026-06-03T00:00:00Z");
+  });
 });
 
 describe("debug CLI session", () => {
@@ -240,6 +258,71 @@ describe("workflow event sender", () => {
     }
   });
 
+  it("can create a pending authorization event for card UI smoke checks", () => {
+    const event = createWorkflowEvent({
+      state: "waiting",
+      runId: "run_auth_debug",
+      timestamp: new Date("2026-06-03T00:00:00Z"),
+      message: "needs approval",
+      contextPath: "/Users/aloha66/code/ai-partner",
+      source: "claude-hook",
+      authorization: {
+        kind: "command",
+        id: "auth_debug_status",
+        title: "Command approval preview",
+        description: "git status",
+        status: "pending"
+      }
+    });
+
+    expect(event).toMatchObject({
+      source: "claude-hook",
+      workflow_state: "waiting",
+      context_path: "/Users/aloha66/code/ai-partner",
+      authorization: {
+        kind: "command",
+        id: "auth_debug_status",
+        title: "Command approval preview",
+        description: "git status",
+        status: "pending"
+      },
+      code_context_allowed: false
+    });
+    expect(() => assertNoForbiddenFields(event)).not.toThrow();
+  });
+
+  it("can send resolved authorization events for command-line decision smoke checks", async () => {
+    const event = createWorkflowEvent({
+      state: "waiting",
+      runId: "run_auth_debug",
+      timestamp: new Date("2026-06-03T00:00:00Z"),
+      authorization: {
+        kind: "command",
+        id: "auth_debug_status",
+        description: "git status",
+        status: "allowed",
+        decidedAt: "2026-06-03T00:00:00Z"
+      }
+    });
+    let postedBody: unknown;
+
+    await sendWorkflowEvent(runtimeDescriptor({ port: 43172 }), event, {
+      post: async (_descriptor, body) => {
+        postedBody = JSON.parse(body);
+        return { status: 202, body: '{"ok":true}' };
+      }
+    });
+
+    expect(postedBody).toMatchObject({
+      workflow_state: "waiting",
+      authorization: {
+        id: "auth_debug_status",
+        status: "allowed",
+        decidedAt: "2026-06-03T00:00:00Z"
+      }
+    });
+  });
+
   it("reports bad token responses and connection failures", async () => {
     const descriptor = runtimeDescriptor({
       port: 43172,
@@ -306,6 +389,29 @@ describe("workflow event sender", () => {
       timestamp: "2026-06-03T00:00:00.000Z",
       code_context_allowed: false
     });
+  });
+
+  it("validates authorization fields when posting a caller-provided event", async () => {
+    const event = {
+      ...createWorkflowEvent({
+        state: "waiting",
+        runId: "run_auth_direct_post",
+        timestamp: new Date("2026-06-03T00:00:00Z")
+      }),
+      authorization: {
+        kind: "command",
+        id: "auth_direct_post",
+        description: "git status\ncat secret",
+        status: "pending"
+      }
+    };
+
+    await expectDebugCliError(
+      sendWorkflowEvent(runtimeDescriptor({ port: 43172 }), event, {
+        post: async () => ({ status: 202, body: "{}" })
+      }),
+      "invalid_message"
+    );
   });
 
   it("allows codex-wrapper events only when the caller opts into that source", async () => {

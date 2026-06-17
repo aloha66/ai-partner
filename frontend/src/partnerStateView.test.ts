@@ -5,6 +5,9 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   idlePartnerState,
+  interactiveCardView,
+  localAuthorizationDecisionKey,
+  resolveAuthorizationDecision,
   partnerStateDisplay
 } from "./partnerStateView";
 
@@ -66,6 +69,158 @@ describe("partner state display", () => {
       connectionLabel: "degraded",
       canClearError: true
     });
+  });
+
+  it("renders a running status card with context and source details", () => {
+    expect(
+      interactiveCardView({
+        ...idlePartnerState,
+        workflowState: "running",
+        runId: "run_debug_1",
+        activeRunId: "run_debug_1",
+        source: "codex-wrapper",
+        message: "正在执行 pnpm test",
+        contextPath: "/Users/aloha66/code/ai-partner",
+        cardTitle: "Running command"
+      })
+    ).toEqual({
+      visible: true,
+      variant: "status",
+      tone: "active",
+      title: "Running command",
+      statusText: "正在执行 pnpm test",
+      contextPath: "/Users/aloha66/code/ai-partner",
+      sourceLabel: "Codex",
+      meta: [
+        {
+          label: "Project",
+          value: "ai-partner",
+          title: "/Users/aloha66/code/ai-partner"
+        },
+        {
+          label: "Worktree",
+          value: "main",
+          title: "/Users/aloha66/code/ai-partner"
+        },
+        {
+          label: "Agent",
+          value: "Codex"
+        }
+      ],
+      action: null
+    });
+  });
+
+  it("renders a pending authorization card and resolves local button decisions", () => {
+    const snapshot: PartnerStateSnapshot = {
+      ...idlePartnerState,
+      workflowState: "waiting",
+      runId: "run_auth_1",
+      activeRunId: "run_auth_1",
+      source: "claude-hook",
+      message: "需要授权执行 git status",
+      contextPath: "/Users/aloha66/code/ai-partner",
+      authorization: {
+        kind: "command",
+        id: "auth_git_status",
+        title: "Command approval preview",
+        description: "git status",
+        status: "pending"
+      }
+    };
+    const authorization = snapshot.authorization;
+    expect(authorization).toBeDefined();
+
+    expect(interactiveCardView(snapshot)).toMatchObject({
+      visible: true,
+      variant: "authorization",
+      tone: "attention",
+      title: "Command approval preview",
+      statusText: "git status",
+      contextPath: "/Users/aloha66/code/ai-partner",
+      sourceLabel: "Claude Code",
+      meta: [
+        {
+          label: "Project",
+          value: "ai-partner",
+          title: "/Users/aloha66/code/ai-partner"
+        },
+        {
+          label: "Worktree",
+          value: "main",
+          title: "/Users/aloha66/code/ai-partner"
+        },
+        {
+          label: "Agent",
+          value: "Claude Code"
+        }
+      ],
+      action: {
+        id: "auth_git_status",
+        kind: "command",
+        status: "pending",
+        allowLabel: "Allow",
+        denyLabel: "Deny"
+      }
+    });
+
+    expect(resolveAuthorizationDecision(authorization!, "allow")).toMatchObject({
+      id: "auth_git_status",
+      status: "allowed",
+      decidedAt: expect.stringMatching(/^20/)
+    });
+    expect(resolveAuthorizationDecision(authorization!, "deny")).toMatchObject({
+      id: "auth_git_status",
+      status: "denied",
+      decidedAt: expect.stringMatching(/^20/)
+    });
+  });
+
+  it("scopes local authorization decisions to a concrete run snapshot", () => {
+    const first: PartnerStateSnapshot = {
+      ...idlePartnerState,
+      workflowState: "waiting",
+      runId: "run_auth_1",
+      activeRunId: "run_auth_1",
+      updatedAt: "2026-06-03T00:00:00Z",
+      authorization: {
+        kind: "command",
+        id: "auth_reused_id",
+        description: "pnpm test",
+        status: "pending"
+      }
+    };
+    const second: PartnerStateSnapshot = {
+      ...first,
+      runId: "run_auth_2",
+      activeRunId: "run_auth_2",
+      updatedAt: "2026-06-03T00:00:01Z"
+    };
+
+    expect(localAuthorizationDecisionKey(first)).not.toBe(localAuthorizationDecisionKey(second));
+  });
+
+  it("summarizes codex worktree paths without leaking the full path into compact metadata", () => {
+    expect(
+      interactiveCardView({
+        ...idlePartnerState,
+        workflowState: "waiting",
+        runId: "run_auth_1",
+        activeRunId: "run_auth_1",
+        source: "codex-wrapper",
+        contextPath: "/Users/aloha66/.codex/worktrees/58a6/ai-partner",
+        authorization: {
+          kind: "command",
+          id: "auth_git_status",
+          description: "pnpm test",
+          status: "pending"
+        }
+      }).meta
+    ).toMatchObject([
+      { label: "Project", value: "ai-partner" },
+      { label: "Worktree", value: "58a6/ai-partner" },
+      { label: "Agent", value: "Codex" }
+    ]);
   });
 
 });

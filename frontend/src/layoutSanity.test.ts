@@ -7,7 +7,11 @@ import {
 } from "./spriteRenderer";
 
 const stylesPath = fileURLToPath(new URL("./styles.css", import.meta.url));
+const tauriConfigPath = fileURLToPath(new URL("../../src-tauri/tauri.conf.json", import.meta.url));
 const styles = readFileSync(stylesPath, "utf8");
+const tauriConfig = JSON.parse(readFileSync(tauriConfigPath, "utf8")) as {
+  app: { windows: Array<{ width: number; height: number; minWidth: number; minHeight: number }> };
+};
 
 function cssPxVar(name: string): number {
   const match = styles.match(new RegExp(`--${name}:\\s*([0-9.]+)px;`));
@@ -45,8 +49,33 @@ const layout = {
   menuMaxHeight: cssPxVar("t8-menu-max-height"),
   selectorWidth: cssPxVar("t8-selector-width"),
   selectorMaxHeight: cssPxVar("t8-selector-max-height"),
-  statusPillWidth: cssPxVar("t8-status-pill-width")
+  statusPillWidth: cssPxVar("t8-status-pill-width"),
+  interactionCardWidth: cssPxVar("t8-interaction-card-width"),
+  interactionCardMaxHeight: cssPxVar("t8-interaction-card-max-height"),
+  interactionCardPadding: cssPxVar("t8-interaction-card-padding"),
+  interactionCardBorder: cssPxVar("t8-interaction-card-border"),
+  interactionCardGap: cssPxVar("t8-interaction-card-gap"),
+  interactionZoneGap: cssPxVar("t8-interaction-zone-gap"),
+  interactionZoneBottomPadding: cssPxVar("t8-interaction-zone-bottom-padding"),
+  interactionCompanionScale: Number(
+    styles.match(/--t8-interaction-companion-scale:\s*([0-9.]+);/)?.[1] ?? Number.NaN
+  ),
+  interactionCompanionVisibleHeight: cssPxVar("t8-interaction-companion-visible-height"),
+  interactionTitleLineHeight: cssPxVar("t8-interaction-title-line-height"),
+  interactionTitleLines: Number(
+    styles.match(/--t8-interaction-title-lines:\s*([0-9.]+);/)?.[1] ?? Number.NaN
+  ),
+  interactionStatusMarginTop: cssPxVar("t8-interaction-status-margin-top"),
+  interactionStatusLineHeight: cssPxVar("t8-interaction-status-line-height"),
+  interactionMetaPaddingY: cssPxVar("t8-interaction-meta-padding-y"),
+  interactionMetaBorder: cssPxVar("t8-interaction-meta-border"),
+  interactionMetaRowGap: cssPxVar("t8-interaction-meta-row-gap"),
+  interactionMetaLabelLineHeight: cssPxVar("t8-interaction-meta-label-line-height"),
+  interactionMetaValueLineHeight: cssPxVar("t8-interaction-meta-value-line-height"),
+  interactionButtonHeight: cssPxVar("t8-interaction-button-height")
 };
+
+const tauriWindow = tauriConfig.app.windows[0];
 
 describe("default 520x360 renderer layout sanity", () => {
   it("keeps the companion-only product surface inside the default window", () => {
@@ -114,6 +143,66 @@ describe("default 520x360 renderer layout sanity", () => {
     const panelInnerWidth = layout.panelWidth - 2 * layout.panelPadding - 2 * layout.panelBorder;
 
     expect(conservativeTextWidth + iconAndGapBudget).toBeLessThanOrEqual(panelInnerWidth);
+  });
+
+  it("keeps the interaction card anchored as an overlay inside the default window", () => {
+    const visibleSpriteHeight = layout.interactionCompanionVisibleHeight;
+
+    expect(layout.interactionCardWidth).toBeLessThan(layout.windowWidth);
+    expect(visibleSpriteHeight).toBeGreaterThanOrEqual(layout.spriteHeight * layout.interactionCompanionScale);
+    expect(layout.interactionCardMaxHeight + layout.interactionZoneGap + visibleSpriteHeight)
+      .toBeLessThanOrEqual(layout.windowHeight);
+    expect(styles).toMatch(/\.interaction-card\s*\{[^}]*position:\s*relative;/s);
+    expect(styles).toMatch(/\.interaction-card\s*\{[^}]*box-shadow:\s*none;/s);
+    expect(styles).toMatch(/\.interaction-card\s*\{[^}]*background:\s*var\(--color-surface-strong\);/s);
+    expect(styles).toMatch(/\.interaction-card\s*\{[^}]*max-height:\s*min\(/s);
+    expect(styles).toMatch(/\.interaction-card h2\s*\{[\s\S]*overflow:\s*hidden;/s);
+    expect(styles).toMatch(/\.interaction-card h2\s*\{[\s\S]*-webkit-line-clamp:\s*var\(--t8-interaction-title-lines\);/s);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*460px\)\s*\{[\s\S]*\.interaction-card\s*\{[^}]*width:\s*min\(100%,\s*calc\(100vw - 12px\)\);/s);
+  });
+
+  it("fits the interaction card and companion inside the Tauri minimum height", () => {
+    const cardContentHeight =
+      layout.interactionTitleLineHeight * layout.interactionTitleLines +
+      layout.interactionStatusMarginTop +
+      layout.interactionStatusLineHeight +
+      layout.interactionCardGap +
+      2 * layout.interactionMetaPaddingY +
+      2 * layout.interactionMetaBorder +
+      layout.interactionMetaRowGap +
+      layout.interactionMetaLabelLineHeight +
+      layout.interactionMetaValueLineHeight +
+      layout.interactionCardGap +
+      layout.interactionButtonHeight;
+    const cardOuterHeight =
+      cardContentHeight +
+      2 * layout.interactionCardPadding +
+      2 * layout.interactionCardBorder;
+    const minimumHeightBudget =
+      tauriWindow.minHeight -
+      2 * layout.padding -
+      layout.interactionZoneBottomPadding -
+      layout.interactionZoneGap -
+      layout.interactionCompanionVisibleHeight;
+
+    expect(cardOuterHeight).toBeLessThanOrEqual(layout.interactionCardMaxHeight);
+    expect(cardOuterHeight).toBeLessThanOrEqual(minimumHeightBudget);
+  });
+
+  it("protects the minimum 380px card layout from companion overlap", () => {
+    const minimumWindowWidth = 380;
+    const mobileCardWidth = minimumWindowWidth - 12;
+    const scaledSpriteWidth = layout.spriteWidth * layout.interactionCompanionScale;
+
+    expect(mobileCardWidth).toBeLessThanOrEqual(minimumWindowWidth);
+    expect(scaledSpriteWidth).toBeLessThan(mobileCardWidth);
+    expect(styles).toMatch(/\.companion-zone\.has-interaction-card \.bubble,[\s\S]*\.companion-zone\.has-interaction-card \.status-pill\s*\{[\s\S]*display:\s*none;/s);
+    expect(styles).toMatch(/\.companion-zone\.has-interaction-card \.partner\s*\{[\s\S]*width:\s*var\(--t8-sprite-width\);/s);
+    expect(styles).toMatch(/\.companion-zone\.has-interaction-card \.partner\s*\{[\s\S]*margin-bottom:\s*var\(--t8-interaction-companion-overlap\);/s);
+    expect(styles).toMatch(/\.companion-zone\.has-interaction-card \.partner\s*\{[\s\S]*transform:\s*scale\(var\(--t8-interaction-companion-scale\)\);/s);
+    expect(styles).toMatch(/\.decision-button\s*\{[\s\S]*min-height:\s*var\(--t8-interaction-button-height\);/s);
+    expect(styles).toMatch(/\.decision-button\.allow\s*\{[\s\S]*background:\s*#dcfce7;/s);
+    expect(styles).toMatch(/\.decision-button\.deny\s*\{[\s\S]*background:\s*#fee2e2;/s);
   });
 
   it("declares light, dark, and system theme paths with CSS variables", () => {

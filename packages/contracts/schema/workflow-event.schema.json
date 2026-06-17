@@ -25,7 +25,7 @@
     },
     "source": {
       "type": "string",
-      "enum": ["cli", "codex-wrapper", "demo-script"]
+      "enum": ["cli", "codex-wrapper", "demo-script", "claude-hook"]
     },
     "run_id": {
       "type": "string",
@@ -45,6 +45,55 @@
       "type": "string",
       "maxLength": 160,
       "pattern": "^[^\\r\\n]*$"
+    },
+    "card_title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[^\\r\\n]*$"
+    },
+    "context_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^[^\\r\\n]*$"
+    },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "description", "status"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["command", "tool"]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "pattern": "^auth_[A-Za-z0-9._:-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[^\\r\\n]*$"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[^\\r\\n]*$"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "allowed", "denied"]
+        },
+        "decidedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
     },
     "code_context_allowed": {
       "const": false

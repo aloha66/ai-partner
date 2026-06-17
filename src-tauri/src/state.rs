@@ -25,6 +25,35 @@ pub enum WorkflowSource {
     Cli,
     CodexWrapper,
     DemoScript,
+    ClaudeHook,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthorizationKind {
+    Command,
+    Tool,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthorizationStatus {
+    Pending,
+    Allowed,
+    Denied,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct WorkflowAuthorization {
+    pub kind: AuthorizationKind,
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    pub description: String,
+    pub status: AuthorizationStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decided_at: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -38,6 +67,9 @@ pub struct WorkflowEventWire {
     pub workflow_state: WorkflowState,
     pub timestamp: String,
     pub message: Option<String>,
+    pub card_title: Option<String>,
+    pub context_path: Option<String>,
+    pub authorization: Option<WorkflowAuthorization>,
     pub code_context_allowed: bool,
 }
 
@@ -68,6 +100,12 @@ pub struct PartnerStateSnapshot {
     pub source: Option<WorkflowSource>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub card_title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub authorization: Option<WorkflowAuthorization>,
     pub priority: SnapshotPriority,
     pub updated_at: String,
     pub paused: bool,
@@ -157,6 +195,9 @@ impl PartnerStateStore {
                 active_run_id: next_active_run_id(&inner.snapshot, &event),
                 source: Some(event.source.clone()),
                 message: event.message.clone(),
+                card_title: event.card_title.clone(),
+                context_path: event.context_path.clone(),
+                authorization: event.authorization.clone(),
                 priority: priority_for(&event.workflow_state),
                 updated_at: event.timestamp.clone(),
                 paused,
@@ -261,6 +302,9 @@ impl PartnerStateSnapshot {
             active_run_id: None,
             source: None,
             message: None,
+            card_title: None,
+            context_path: None,
+            authorization: None,
             priority: SnapshotPriority::Normal,
             updated_at: updated_at.to_string(),
             paused: false,
@@ -281,15 +325,56 @@ impl WorkflowEventWire {
             return Err("code_context_allowed must be false".to_string());
         }
         if let Some(message) = &self.message {
-            if message.chars().count() > 160 {
-                return Err("message must be 160 chars or fewer".to_string());
-            }
-            if message.contains('\n') || message.contains('\r') {
-                return Err("message must not contain newlines".to_string());
-            }
+            validate_message_text(message, 160)?;
+        }
+        if let Some(card_title) = &self.card_title {
+            validate_short_text(card_title, "card_title", 80)?;
+        }
+        if let Some(context_path) = &self.context_path {
+            validate_short_text(context_path, "context_path", 240)?;
+        }
+        if let Some(authorization) = &self.authorization {
+            authorization.validate()?;
         }
         Ok(())
     }
+}
+
+impl WorkflowAuthorization {
+    fn validate(&self) -> Result<(), String> {
+        validate_contract_id(&self.id, "auth_", "authorization.id")?;
+        if let Some(title) = &self.title {
+            validate_short_text(title, "authorization.title", 80)?;
+        }
+        validate_short_text(&self.description, "authorization.description", 160)?;
+        if let Some(decided_at) = &self.decided_at {
+            parse_event_timestamp(decided_at)?;
+        }
+        Ok(())
+    }
+}
+
+fn validate_short_text(value: &str, field: &str, max_chars: usize) -> Result<(), String> {
+    if value.is_empty() {
+        return Err(format!("{field} must not be empty"));
+    }
+    if value.chars().count() > max_chars {
+        return Err(format!("{field} must be {max_chars} chars or fewer"));
+    }
+    if value.contains('\n') || value.contains('\r') {
+        return Err(format!("{field} must not contain newlines"));
+    }
+    Ok(())
+}
+
+fn validate_message_text(value: &str, max_chars: usize) -> Result<(), String> {
+    if value.chars().count() > max_chars {
+        return Err(format!("message must be {max_chars} chars or fewer"));
+    }
+    if value.contains('\n') || value.contains('\r') {
+        return Err("message must not contain newlines".to_string());
+    }
+    Ok(())
 }
 
 fn validate_contract_id(value: &str, prefix: &str, field: &str) -> Result<(), String> {
@@ -390,6 +475,9 @@ mod tests {
             workflow_state,
             timestamp: "2026-06-03T00:00:00Z".to_string(),
             message: Some("working".to_string()),
+            card_title: None,
+            context_path: None,
+            authorization: None,
             code_context_allowed: false,
         }
     }
@@ -693,6 +781,19 @@ mod tests {
     }
 
     #[test]
+    fn accepts_empty_message_for_v1_compatibility() {
+        let store = PartnerStateStore::new(Duration::from_millis(1));
+        let mut empty_message = event("run_empty_message", WorkflowState::Reading);
+        empty_message.message = Some(String::new());
+
+        let transition = store
+            .apply_workflow_event(empty_message)
+            .expect("empty message is schema-valid v1 payload");
+
+        assert_eq!(transition.snapshot.message.as_deref(), Some(""));
+    }
+
+    #[test]
     fn rejects_bad_schema_version_and_contract_ids() {
         let mut bad_version = event("run_alpha", WorkflowState::Reading);
         bad_version.schema_version = "ai-partner.workflow-event.v2".to_string();
@@ -721,5 +822,30 @@ mod tests {
         long_message.message = Some("a".repeat(161));
 
         assert_event_rejected(long_message, "160 chars");
+    }
+
+    #[test]
+    fn rejects_unknown_authorization_fields() {
+        let raw = serde_json::json!({
+            "schemaVersion": WORKFLOW_EVENT_SCHEMA_VERSION,
+            "event_id": "evt_auth_unknown",
+            "source": "claude-hook",
+            "run_id": "run_auth_unknown",
+            "workflow_state": "waiting",
+            "timestamp": "2026-06-03T00:00:00Z",
+            "authorization": {
+                "kind": "command",
+                "id": "auth_unknown",
+                "description": "git status",
+                "status": "pending",
+                "token": "secret"
+            },
+            "code_context_allowed": false
+        });
+
+        assert!(
+            serde_json::from_value::<WorkflowEventWire>(raw).is_err(),
+            "authorization extras must not be silently dropped"
+        );
     }
 }

@@ -15,6 +15,7 @@ import {
   writeDebugSessionRunId
 } from "./index.js";
 import { asDebugCliError, DebugCliError } from "./errors.js";
+import type { WorkflowSource } from "@ai-partner/contracts";
 
 interface ParsedArgs {
   command: string;
@@ -79,9 +80,16 @@ async function runSend(args: ParsedArgs): Promise<void> {
   const event = createWorkflowEvent({
     state,
     runId: explicitRunId ?? await defaultRunIdForSend(state),
-    message: readOptionalFlag(args, "message")
+    message: readOptionalFlag(args, "message"),
+    source: readWorkflowSource(args),
+    cardTitle: readOptionalFlag(args, "card-title"),
+    contextPath: readOptionalFlag(args, "context-path"),
+    authorization: readAuthorization(args)
   });
-  await sendWorkflowEvent(descriptor, event, sendOptions(args));
+  await sendWorkflowEvent(descriptor, event, {
+    ...sendOptions(args),
+    allowedSources: [event.source]
+  });
   await rememberRunIdForSend(state, event.run_id, explicitRunId);
   console.log(`sent ${event.workflow_state} run_id=${event.run_id} event_id=${event.event_id}`);
 }
@@ -95,9 +103,15 @@ async function runSequence(args: ParsedArgs): Promise<void> {
     const event = createWorkflowEvent({
       state,
       runId,
-      message: readOptionalFlag(args, "message")
+      message: readOptionalFlag(args, "message"),
+      source: readWorkflowSource(args),
+      cardTitle: readOptionalFlag(args, "card-title"),
+      contextPath: readOptionalFlag(args, "context-path")
     });
-    await sendWorkflowEvent(descriptor, event, sendOptions(args));
+    await sendWorkflowEvent(descriptor, event, {
+      ...sendOptions(args),
+      allowedSources: [event.source]
+    });
     console.log(`sent ${event.workflow_state} run_id=${event.run_id} event_id=${event.event_id}`);
     if (state !== debugWorkflowStates[debugWorkflowStates.length - 1]) {
       await sleep(delayMs);
@@ -193,6 +207,45 @@ function readOptionalFlag(args: ParsedArgs, key: string): string | undefined {
   return value;
 }
 
+function readWorkflowSource(args: ParsedArgs): WorkflowSource | undefined {
+  const source = readOptionalFlag(args, "source");
+  if (source === undefined) {
+    return undefined;
+  }
+  if (!["cli", "codex-wrapper", "demo-script", "claude-hook"].includes(source)) {
+    throw new DebugCliError("--source must be cli, codex-wrapper, demo-script, or claude-hook.", "usage");
+  }
+  return source as WorkflowSource;
+}
+
+function readAuthorization(args: ParsedArgs) {
+  const id = readOptionalFlag(args, "auth-id");
+  const description = readOptionalFlag(args, "auth-description");
+  if (id === undefined && description === undefined) {
+    return undefined;
+  }
+  if (id === undefined || description === undefined) {
+    throw new DebugCliError("--auth-id and --auth-description must be provided together.", "usage");
+  }
+  const kind = readOptionalFlag(args, "auth-kind") ?? "command";
+  if (!["command", "tool"].includes(kind)) {
+    throw new DebugCliError("--auth-kind must be command or tool.", "usage");
+  }
+  const status = readOptionalFlag(args, "auth-status") ?? "pending";
+  if (!["pending", "allowed", "denied"].includes(status)) {
+    throw new DebugCliError("--auth-status must be pending, allowed, or denied.", "usage");
+  }
+  const decidedAt = readOptionalFlag(args, "auth-decided-at");
+  return {
+    kind: kind as "command" | "tool",
+    id,
+    title: readOptionalFlag(args, "auth-title"),
+    description,
+    status: status as "pending" | "allowed" | "denied",
+    ...(decidedAt === undefined ? {} : { decidedAt })
+  };
+}
+
 function readNumberFlag(args: ParsedArgs, key: string, fallback: number): number;
 function readNumberFlag(args: ParsedArgs, key: string, fallback: undefined): number | undefined;
 function readNumberFlag(args: ParsedArgs, key: string, fallback: number | undefined) {
@@ -215,7 +268,7 @@ function printHelp(): void {
 
 Usage:
   ai-partner-debug discover [--descriptor path]
-  ai-partner-debug send <state> [--message text] [--run-id run_id]
+  ai-partner-debug send <state> [--message text] [--run-id run_id] [--context-path path] [--auth-id auth_id --auth-description text] [--auth-status pending|allowed|denied]
   ai-partner-debug sequence [--delay-ms 500] [--run-id run_id]
 
 States:

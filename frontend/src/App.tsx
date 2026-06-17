@@ -17,15 +17,21 @@ import {
   ScanLine,
   ShieldCheck,
   Sparkles,
+  LoaderCircle,
   SunMoon,
   UserRound,
   X,
   XCircle
 } from "lucide-react";
-import { type AnimationIntent } from "@ai-partner/contracts";
+import {
+  WORKFLOW_EVENT_SCHEMA_VERSION,
+  type AnimationIntent,
+  type WorkflowAuthorization
+} from "@ai-partner/contracts";
 import { type PhysicalHorizontalDirection } from "@ai-partner/resolver";
 import {
   applyM0WindowDefaults,
+  applyWorkflowEvent,
   clearPartnerError,
   currentCursorPosition,
   currentWindowPosition,
@@ -51,8 +57,11 @@ import {
 } from "./tauriWindow";
 import {
   idlePartnerState,
+  interactiveCardView,
+  localAuthorizationDecisionKey,
   partnerStateDisplay
 } from "./partnerStateView";
+import { resolveAuthorizationDecision } from "./partnerStateView";
 import {
   resolvePartnerIntent
 } from "./animationIntentView";
@@ -146,6 +155,58 @@ function readInitialThemePreference(): ThemePreference {
   }
 }
 
+function debugPreviewPartnerState() {
+  if (debugMode !== "visible") {
+    return null;
+  }
+
+  const card = new URLSearchParams(window.location.search).get("card");
+  if (card === "auth") {
+    return {
+      ...idlePartnerState,
+      workflowState: "waiting" as const,
+      runId: "run_preview_auth",
+      activeRunId: "run_preview_auth",
+      source: "claude-hook" as const,
+      message: "需要授权执行命令",
+      cardTitle: "Command approval preview",
+      contextPath: "/Users/aloha66/code/ai-partner",
+      authorization: {
+        kind: "command" as const,
+        id: "auth_preview_command",
+        title: "Command approval preview",
+        description: "pnpm test",
+        status: "pending" as const
+      },
+      updatedAt: new Date().toISOString(),
+      connection: "ok" as const
+    };
+  }
+
+  if (card === "running") {
+    return {
+      ...idlePartnerState,
+      workflowState: "running" as const,
+      runId: "run_preview_running",
+      activeRunId: "run_preview_running",
+      source: "codex-wrapper" as const,
+      message: "正在执行 pnpm test",
+      cardTitle: "Running command",
+      contextPath: "/Users/aloha66/code/ai-partner",
+      updatedAt: new Date().toISOString(),
+      connection: "ok" as const
+    };
+  }
+
+  return null;
+}
+
+function decisionEventId(authorizationId: string, choice: "allow" | "deny", decidedAt: string): string {
+  const authSegment = authorizationId.replace(/[^A-Za-z0-9._:-]/g, "_").slice(0, 58);
+  const timeSegment = Date.parse(decidedAt).toString(36);
+  return `evt_${authSegment}_${choice}_${timeSegment}`;
+}
+
 function contextMenuPosition(clientX: number, clientY: number): MenuPosition {
   const viewportWidth = Math.max(window.innerWidth, CONTEXT_MENU_WIDTH_PX + CONTEXT_MENU_MARGIN_PX * 2);
   const viewportHeight = Math.max(window.innerHeight, CONTEXT_MENU_MAX_HEIGHT_PX + CONTEXT_MENU_MARGIN_PX * 2);
@@ -179,7 +240,10 @@ export function App() {
   const [status, setStatus] = useState<SpikeStatus | null>(null);
   const [clickThrough, setClickThrough] = useState(false);
   const [recoveryStatus, setRecoveryStatus] = useState("auto");
-  const [partnerState, setPartnerState] = useState(idlePartnerState);
+  const [partnerState, setPartnerState] = useState(() => debugPreviewPartnerState() ?? idlePartnerState);
+  const [localAuthorizationDecisions, setLocalAuthorizationDecisions] = useState<
+    Record<string, WorkflowAuthorization>
+  >({});
   const [stateCommandStatus, setStateCommandStatus] = useState("ok");
   const [queuedAnimations, setQueuedAnimations] = useState<AnimationIntent["queued"]>([]);
   const recoveryTimerRef = useRef<number | null>(null);
@@ -231,6 +295,22 @@ export function App() {
     [partnerState, physicalState, queuedAnimations, activeCompanion.capabilities, dragDirection]
   );
   const stateDisplay = partnerStateDisplay(partnerState);
+  const displayedPartnerState = useMemo(() => {
+    const authorization = partnerState.authorization;
+    if (!authorization) {
+      return partnerState;
+    }
+    const localDecision = localAuthorizationDecisions[localAuthorizationDecisionKey(partnerState)];
+    if (!localDecision) {
+      return partnerState;
+    }
+    return {
+      ...partnerState,
+      authorization: localDecision
+    };
+  }, [localAuthorizationDecisions, partnerState]);
+  const interactionCard = interactiveCardView(displayedPartnerState);
+  const actionableInteractionCard = interactionCard.action?.status === "pending";
   const selectorOptions = useMemo(
     () => companionSelectorOptions(companionCatalog, activeCompanion.id, selectorQuery),
     [companionCatalog, activeCompanion.id, selectorQuery]
@@ -276,6 +356,20 @@ export function App() {
     setWindowFocusable(false).catch(() => undefined);
     return undefined;
   }, [selectorOpen]);
+
+  useEffect(() => {
+    if (selectorOpen) {
+      return undefined;
+    }
+    if (actionableInteractionCard) {
+      setWindowFocusable(true).catch(() => undefined);
+      return () => {
+        setWindowFocusable(false).catch(() => undefined);
+      };
+    }
+    setWindowFocusable(false).catch(() => undefined);
+    return undefined;
+  }, [actionableInteractionCard, selectorOpen]);
 
   useEffect(() => {
     if (!selectorOpen && !contextMenuOpen) {
@@ -362,6 +456,10 @@ export function App() {
     const startupRevision = stateRevisionRef.current;
 
     void (async () => {
+      if (debugPreviewPartnerState()) {
+        return;
+      }
+
       try {
         const unlisten = await listenPartnerStateChanged((snapshot) => {
           if (!disposed) {
@@ -614,6 +712,51 @@ export function App() {
     setCompanionStatus("fallback");
   }
 
+  async function decideAuthorization(choice: "allow" | "deny") {
+    const authorization = displayedPartnerState.authorization;
+    if (!authorization || authorization.status !== "pending") {
+      return;
+    }
+
+    const decidedAt = new Date();
+    const decision = resolveAuthorizationDecision(authorization, choice, decidedAt);
+    const decisionKey = localAuthorizationDecisionKey(displayedPartnerState);
+
+    const runId = displayedPartnerState.activeRunId ?? displayedPartnerState.runId;
+    if (!runId || displayedPartnerState.source === null) {
+      setLocalAuthorizationDecisions((current) => ({
+        ...current,
+        [decisionKey]: decision
+      }));
+      return;
+    }
+
+    try {
+      const snapshot = await applyWorkflowEvent({
+        schemaVersion: WORKFLOW_EVENT_SCHEMA_VERSION,
+        event_id: decisionEventId(authorization.id, choice, decision.decidedAt ?? decidedAt.toISOString()),
+        source: displayedPartnerState.source,
+        run_id: runId,
+        workflow_state: displayedPartnerState.workflowState,
+        timestamp: decision.decidedAt ?? decidedAt.toISOString(),
+        ...(displayedPartnerState.message === undefined ? {} : { message: displayedPartnerState.message }),
+        ...(displayedPartnerState.cardTitle === undefined ? {} : { card_title: displayedPartnerState.cardTitle }),
+        ...(displayedPartnerState.contextPath === undefined ? {} : { context_path: displayedPartnerState.contextPath }),
+        authorization: decision,
+        code_context_allowed: false
+      });
+      stateRevisionRef.current += 1;
+      setPartnerState(snapshot);
+      setLocalAuthorizationDecisions((current) => ({
+        ...current,
+        [decisionKey]: decision
+      }));
+      setStateCommandStatus("ok");
+    } catch {
+      setStateCommandStatus("fail");
+    }
+  }
+
   function openContextMenu(event: React.MouseEvent<HTMLElement>) {
     if (event.target === event.currentTarget) {
       closeContextMenu();
@@ -665,7 +808,66 @@ export function App() {
         }
       }}
     >
-      <section className="companion-zone" aria-label="M0 window spike" onContextMenu={openContextMenu}>
+      <section
+        className={`companion-zone ${interactionCard.visible ? "has-interaction-card" : ""}`}
+        aria-label="M0 window spike"
+        onContextMenu={openContextMenu}
+      >
+        {interactionCard.visible ? (
+          <section
+            className={`interaction-card is-${interactionCard.variant} tone-${interactionCard.tone}`}
+            aria-label="workflow interaction card"
+            aria-live="polite"
+          >
+            <header className="interaction-card-header">
+              <span className="state-indicator" aria-hidden>
+                {interactionCard.tone === "active" || interactionCard.tone === "attention" ? (
+                  <LoaderCircle size={14} />
+                ) : null}
+              </span>
+              <div>
+                <h2>{interactionCard.title}</h2>
+                <p>{interactionCard.statusText}</p>
+              </div>
+              <strong className="agent-badge">{interactionCard.sourceLabel}</strong>
+            </header>
+            <div className="interaction-meta" aria-label="workflow source details">
+              {interactionCard.meta.filter((item) => item.label !== "Agent").map((item) => (
+                <span key={item.label} title={item.title ?? item.value}>
+                  <b>{item.label}</b>
+                  <strong>{item.value}</strong>
+                </span>
+              ))}
+            </div>
+            {interactionCard.action ? (
+              <div className="interaction-actions">
+                {interactionCard.action.status === "pending" ? (
+                  <>
+                    <button
+                      className="decision-button deny"
+                      type="button"
+                      onClick={() => void decideAuthorization("deny")}
+                    >
+                      {interactionCard.action.denyLabel}
+                    </button>
+                    <button
+                      className="decision-button allow"
+                      type="button"
+                      onClick={() => void decideAuthorization("allow")}
+                    >
+                      {interactionCard.action.allowLabel}
+                    </button>
+                  </>
+                ) : (
+                  <div className={`decision-result ${interactionCard.action.status}`}>
+                    {interactionCard.action.status === "allowed" ? "Allowed" : "Denied"}
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
         <PartnerRenderer
           intent={animationIntent}
           frameIndex={frameIndex}
