@@ -11,6 +11,8 @@ export const connectionStates = ["ok", "degraded", "disconnected"] as const;
 export type SnapshotPriority = (typeof snapshotPriorities)[number];
 export type ConnectionState = (typeof connectionStates)[number];
 
+// v1 is intentionally a single active workflow snapshot. Multiple agent/worktree
+// events are resolved by the state store before this contract reaches the UI.
 export interface PartnerStateSnapshot {
   schemaVersion: typeof PARTNER_STATE_SNAPSHOT_SCHEMA_VERSION;
   workflowState: WorkflowState;

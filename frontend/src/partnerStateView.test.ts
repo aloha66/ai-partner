@@ -176,12 +176,13 @@ describe("partner state display", () => {
     });
   });
 
-  it("scopes local authorization decisions to a concrete run snapshot", () => {
+  it("scopes local authorization decisions to a concrete source/run snapshot", () => {
     const first: PartnerStateSnapshot = {
       ...idlePartnerState,
       workflowState: "waiting",
       runId: "run_auth_1",
       activeRunId: "run_auth_1",
+      source: "codex-wrapper",
       updatedAt: "2026-06-03T00:00:00Z",
       authorization: {
         kind: "command",
@@ -196,8 +197,13 @@ describe("partner state display", () => {
       activeRunId: "run_auth_2",
       updatedAt: "2026-06-03T00:00:01Z"
     };
+    const third: PartnerStateSnapshot = {
+      ...first,
+      source: "claude-hook"
+    };
 
     expect(localAuthorizationDecisionKey(first)).not.toBe(localAuthorizationDecisionKey(second));
+    expect(localAuthorizationDecisionKey(first)).not.toBe(localAuthorizationDecisionKey(third));
   });
 
   it("summarizes codex worktree paths without leaking the full path into compact metadata", () => {

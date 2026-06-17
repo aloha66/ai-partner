@@ -158,6 +158,10 @@ describe("default 520x360 renderer layout sanity", () => {
     expect(styles).toMatch(/\.interaction-card\s*\{[^}]*max-height:\s*min\(/s);
     expect(styles).toMatch(/\.interaction-card h2\s*\{[\s\S]*overflow:\s*hidden;/s);
     expect(styles).toMatch(/\.interaction-card h2\s*\{[\s\S]*-webkit-line-clamp:\s*var\(--t8-interaction-title-lines\);/s);
+    expect(styles).toMatch(/\.agent-badge\s*\{[\s\S]*max-width:\s*74px;/s);
+    expect(styles).toMatch(/\.agent-badge\s*\{[\s\S]*overflow:\s*hidden;/s);
+    expect(styles).toMatch(/\.agent-badge\s*\{[\s\S]*text-overflow:\s*ellipsis;/s);
+    expect(styles).toMatch(/\.interaction-meta\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/s);
     expect(styles).toMatch(/@media\s*\(max-width:\s*460px\)\s*\{[\s\S]*\.interaction-card\s*\{[^}]*width:\s*min\(100%,\s*calc\(100vw - 12px\)\);/s);
   });
 

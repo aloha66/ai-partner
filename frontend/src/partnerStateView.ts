@@ -180,6 +180,7 @@ export function localAuthorizationDecisionKey(snapshot: PartnerStateSnapshot): s
     return "none";
   }
   return [
+    snapshot.source ?? "unknown-source",
     snapshot.activeRunId ?? snapshot.runId ?? "no-run",
     snapshot.updatedAt,
     authorization.id

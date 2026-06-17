@@ -310,6 +310,8 @@ export function App() {
     };
   }, [localAuthorizationDecisions, partnerState]);
   const interactionCard = interactiveCardView(displayedPartnerState);
+  // Agent stays in the header badge; metadata cells are reserved for workspace context.
+  const interactionContextMeta = interactionCard.meta.filter((item) => item.label !== "Agent");
   const actionableInteractionCard = interactionCard.action?.status === "pending";
   const selectorOptions = useMemo(
     () => companionSelectorOptions(companionCatalog, activeCompanion.id, selectorQuery),
@@ -831,8 +833,8 @@ export function App() {
               </div>
               <strong className="agent-badge">{interactionCard.sourceLabel}</strong>
             </header>
-            <div className="interaction-meta" aria-label="workflow source details">
-              {interactionCard.meta.filter((item) => item.label !== "Agent").map((item) => (
+            <div className="interaction-meta" aria-label="workflow context details">
+              {interactionContextMeta.map((item) => (
                 <span key={item.label} title={item.title ?? item.value}>
                   <b>{item.label}</b>
                   <strong>{item.value}</strong>

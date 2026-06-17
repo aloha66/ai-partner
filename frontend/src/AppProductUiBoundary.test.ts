@@ -37,4 +37,14 @@ describe("companion product UI boundary", () => {
     expect(appSource).toContain("Could not read local companion folders.");
     expect(userFacingText).not.toMatch(/marketplace|download|import|delete|edit companion/i);
   });
+
+  it("keeps agent identity in the card header instead of the context grid", () => {
+    expect(appSource).toContain("Agent stays in the header badge");
+    expect(appSource).toContain('className="agent-badge"');
+    expect(appSource).toContain(
+      'interactionCard.meta.filter((item) => item.label !== "Agent")'
+    );
+    expect(appSource).toContain('aria-label="workflow context details"');
+    expect(appSource).not.toContain('aria-label="workflow source details"');
+  });
 });

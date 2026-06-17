@@ -1,5 +1,6 @@
 use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -19,7 +20,7 @@ pub enum WorkflowState {
     Done,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Hash, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum WorkflowSource {
     Cli,
@@ -135,6 +136,13 @@ pub struct PartnerStateStore {
 struct PartnerStateStoreInner {
     snapshot: PartnerStateSnapshot,
     generation: u64,
+    retired_runs: HashSet<WorkflowRunIdentity>,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+struct WorkflowRunIdentity {
+    source: WorkflowSource,
+    run_id: String,
 }
 
 impl Default for PartnerStateStore {
@@ -149,6 +157,7 @@ impl PartnerStateStore {
             inner: Arc::new(Mutex::new(PartnerStateStoreInner {
                 snapshot: PartnerStateSnapshot::idle("1970-01-01T00:00:00Z"),
                 generation: 0,
+                retired_runs: HashSet::new(),
             })),
             done_idle_after,
         }
@@ -173,7 +182,7 @@ impl PartnerStateStore {
         event.validate()?;
 
         let mut inner = self.inner.lock().expect("state mutex poisoned");
-        if !should_accept_event(&inner.snapshot, &event) {
+        if !should_accept_event(&inner.snapshot, &inner.retired_runs, &event) {
             return Ok(StateTransition {
                 snapshot: inner.snapshot.clone(),
                 should_emit: false,
@@ -183,11 +192,25 @@ impl PartnerStateStore {
 
         inner.generation += 1;
         let paused = inner.snapshot.paused;
+        let previous_active_run = WorkflowRunIdentity::from_snapshot(&inner.snapshot);
+        let event_run = WorkflowRunIdentity::from_event(&event);
         let snapshot = if event.workflow_state == WorkflowState::Idle {
             let mut idle = PartnerStateSnapshot::idle(&event.timestamp);
             idle.paused = paused;
+            inner.retired_runs.insert(event_run);
             idle
         } else {
+            if event.workflow_state.is_active_phase() {
+                if let Some(previous_run) = previous_active_run {
+                    if previous_run != event_run {
+                        // V1 exposes one active card, not a multi-card queue. Once a run is
+                        // preempted, later events for that same run are expired for this app
+                        // session and must use a new run_id to surface again.
+                        inner.retired_runs.insert(previous_run);
+                    }
+                }
+                inner.retired_runs.remove(&event_run);
+            }
             PartnerStateSnapshot {
                 schema_version: PARTNER_STATE_SNAPSHOT_SCHEMA_VERSION.to_string(),
                 workflow_state: event.workflow_state.clone(),
@@ -260,6 +283,9 @@ impl PartnerStateStore {
         inner.generation += 1;
         let paused = inner.snapshot.paused;
         let updated_at = inner.snapshot.updated_at.clone();
+        if let Some(active_run) = WorkflowRunIdentity::from_snapshot(&inner.snapshot) {
+            inner.retired_runs.insert(active_run);
+        }
         inner.snapshot = PartnerStateSnapshot::idle(&updated_at);
         inner.snapshot.paused = paused;
 
@@ -282,6 +308,9 @@ impl PartnerStateStore {
         inner.generation += 1;
         let paused = inner.snapshot.paused;
         let updated_at = inner.snapshot.updated_at.clone();
+        if let Some(active_run) = WorkflowRunIdentity::from_snapshot(&inner.snapshot) {
+            inner.retired_runs.insert(active_run);
+        }
         inner.snapshot = PartnerStateSnapshot::idle(&updated_at);
         inner.snapshot.paused = paused;
 
@@ -310,6 +339,34 @@ impl PartnerStateSnapshot {
             paused: false,
             connection: ConnectionState::Ok,
         }
+    }
+}
+
+impl WorkflowState {
+    fn is_active_phase(&self) -> bool {
+        matches!(
+            self,
+            WorkflowState::Running
+                | WorkflowState::Reading
+                | WorkflowState::Editing
+                | WorkflowState::Waiting
+        )
+    }
+}
+
+impl WorkflowRunIdentity {
+    fn from_event(event: &WorkflowEventWire) -> Self {
+        Self {
+            source: event.source.clone(),
+            run_id: event.run_id.clone(),
+        }
+    }
+
+    fn from_snapshot(snapshot: &PartnerStateSnapshot) -> Option<Self> {
+        Some(Self {
+            source: snapshot.source.clone()?,
+            run_id: snapshot.active_run_id.clone()?,
+        })
     }
 }
 
@@ -403,8 +460,18 @@ fn parse_event_timestamp(value: &str) -> Result<DateTime<FixedOffset>, String> {
         .map_err(|_| "timestamp must be RFC3339 date-time".to_string())
 }
 
-fn should_accept_event(snapshot: &PartnerStateSnapshot, event: &WorkflowEventWire) -> bool {
+fn should_accept_event(
+    snapshot: &PartnerStateSnapshot,
+    retired_runs: &HashSet<WorkflowRunIdentity>,
+    event: &WorkflowEventWire,
+) -> bool {
     if event_is_older_than_snapshot(snapshot, event) {
+        return false;
+    }
+
+    let event_run = WorkflowRunIdentity::from_event(event);
+    let active_run = WorkflowRunIdentity::from_snapshot(snapshot);
+    if retired_runs.contains(&event_run) && active_run.as_ref() != Some(&event_run) {
         return false;
     }
 
@@ -414,8 +481,7 @@ fn should_accept_event(snapshot: &PartnerStateSnapshot, event: &WorkflowEventWir
         | WorkflowState::Editing
         | WorkflowState::Waiting => true,
         WorkflowState::Done | WorkflowState::Error | WorkflowState::Idle => {
-            snapshot.active_run_id.as_deref().is_none()
-                || snapshot.active_run_id.as_deref() == Some(event.run_id.as_str())
+            active_run.is_none() || active_run.as_ref() == Some(&event_run)
         }
     }
 }
@@ -767,6 +833,97 @@ mod tests {
             transition.snapshot.active_run_id.as_deref(),
             Some("run_new")
         );
+    }
+
+    #[test]
+    fn preempted_run_cannot_reclaim_single_active_card_with_newer_event() {
+        let store = PartnerStateStore::new(Duration::from_millis(1));
+        let mut old_run = event("run_old", WorkflowState::Waiting);
+        old_run.timestamp = "2026-06-03T00:00:00Z".to_string();
+        store
+            .apply_workflow_event(old_run)
+            .expect("old run should start");
+
+        let mut new_run = event("run_new", WorkflowState::Editing);
+        new_run.timestamp = "2026-06-03T00:00:10Z".to_string();
+        store
+            .apply_workflow_event(new_run)
+            .expect("new run should preempt old run");
+
+        let mut late_old_run = event("run_old", WorkflowState::Waiting);
+        late_old_run.timestamp = "2026-06-03T00:00:11Z".to_string();
+        late_old_run.message = Some("late authorization should not surface".to_string());
+        let transition = store
+            .apply_workflow_event(late_old_run)
+            .expect("preempted run should expire instead of queuing");
+
+        assert!(!transition.should_emit);
+        assert_eq!(transition.snapshot.workflow_state, WorkflowState::Editing);
+        assert_eq!(
+            transition.snapshot.active_run_id.as_deref(),
+            Some("run_new")
+        );
+        assert_eq!(transition.snapshot.message.as_deref(), Some("working"));
+    }
+
+    #[test]
+    fn completed_run_cannot_reappear_after_timer_clears_card_to_idle() {
+        let store = PartnerStateStore::new(Duration::from_millis(1));
+        let mut done = event("run_done", WorkflowState::Done);
+        done.timestamp = "2026-06-03T00:00:00Z".to_string();
+        let transition = store
+            .apply_workflow_event(done)
+            .expect("done run should apply");
+        store
+            .complete_done_idle_timer(transition.done_idle_timer.expect("timer expected"))
+            .expect("done timer should clear to idle");
+
+        let mut resumed_old_run = event("run_done", WorkflowState::Running);
+        resumed_old_run.timestamp = "2026-06-03T00:00:10Z".to_string();
+        let transition = store
+            .apply_workflow_event(resumed_old_run)
+            .expect("completed run should stay expired");
+
+        assert!(!transition.should_emit);
+        assert_eq!(transition.snapshot.workflow_state, WorkflowState::Idle);
+        assert_eq!(transition.snapshot.active_run_id, None);
+    }
+
+    #[test]
+    fn same_run_id_from_different_sources_is_a_distinct_active_workflow() {
+        let store = PartnerStateStore::new(Duration::from_millis(1));
+        let mut demo_run = event("run_shared", WorkflowState::Reading);
+        demo_run.source = WorkflowSource::DemoScript;
+        demo_run.timestamp = "2026-06-03T00:00:00Z".to_string();
+        store
+            .apply_workflow_event(demo_run)
+            .expect("demo run should start");
+
+        let mut claude_run = event("run_shared", WorkflowState::Waiting);
+        claude_run.source = WorkflowSource::ClaudeHook;
+        claude_run.timestamp = "2026-06-03T00:00:10Z".to_string();
+        let transition = store
+            .apply_workflow_event(claude_run)
+            .expect("same run id from another source should be a distinct active run");
+
+        assert!(transition.should_emit);
+        assert_eq!(transition.snapshot.workflow_state, WorkflowState::Waiting);
+        assert_eq!(transition.snapshot.source, Some(WorkflowSource::ClaudeHook));
+        assert_eq!(
+            transition.snapshot.active_run_id.as_deref(),
+            Some("run_shared")
+        );
+
+        let mut late_demo_run = event("run_shared", WorkflowState::Running);
+        late_demo_run.source = WorkflowSource::DemoScript;
+        late_demo_run.timestamp = "2026-06-03T00:00:11Z".to_string();
+        let transition = store
+            .apply_workflow_event(late_demo_run)
+            .expect("preempted source/run pair should stay expired");
+
+        assert!(!transition.should_emit);
+        assert_eq!(transition.snapshot.source, Some(WorkflowSource::ClaudeHook));
+        assert_eq!(transition.snapshot.workflow_state, WorkflowState::Waiting);
     }
 
     #[test]

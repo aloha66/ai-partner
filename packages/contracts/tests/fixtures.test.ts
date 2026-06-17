@@ -98,6 +98,23 @@ describe("contract fixtures", () => {
     });
   });
 
+  it("keeps partner snapshots single-active instead of exposing a card queue", () => {
+    const validate = ajv.compile(partnerStateSnapshotSchema);
+    const snapshot = readJsonFixture(
+      "valid",
+      "partner-state-snapshot-reading.json"
+    ) as Record<string, unknown>;
+
+    expect(validate(snapshot), JSON.stringify(validate.errors, null, 2)).toBe(true);
+    expect(snapshot).toMatchObject({
+      runId: "run_abc123",
+      activeRunId: "run_abc123"
+    });
+    expect(snapshot).not.toHaveProperty("cards");
+    expect(snapshot).not.toHaveProperty("queue");
+    expect(snapshot).not.toHaveProperty("workflows");
+  });
+
   it("has fixture names covered by schema prefixes", () => {
     for (const fileName of [...fixtureNames("valid"), ...fixtureNames("invalid")]) {
       expect(() => schemaForFixture(fileName), basename(join("fixtures", fileName))).not.toThrow();
