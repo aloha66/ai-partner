@@ -23,10 +23,15 @@ import {
   X,
   XCircle
 } from "lucide-react";
-import { type AnimationIntent, type WorkflowAuthorization } from "@ai-partner/contracts";
+import {
+  WORKFLOW_EVENT_SCHEMA_VERSION,
+  type AnimationIntent,
+  type WorkflowAuthorization
+} from "@ai-partner/contracts";
 import { type PhysicalHorizontalDirection } from "@ai-partner/resolver";
 import {
   applyM0WindowDefaults,
+  applyWorkflowEvent,
   clearPartnerError,
   currentCursorPosition,
   currentWindowPosition,
@@ -194,6 +199,12 @@ function debugPreviewPartnerState() {
   }
 
   return null;
+}
+
+function decisionEventId(authorizationId: string, choice: "allow" | "deny", decidedAt: string): string {
+  const authSegment = authorizationId.replace(/[^A-Za-z0-9._:-]/g, "_").slice(0, 58);
+  const timeSegment = Date.parse(decidedAt).toString(36);
+  return `evt_${authSegment}_${choice}_${timeSegment}`;
 }
 
 function contextMenuPosition(clientX: number, clientY: number): MenuPosition {
@@ -701,17 +712,49 @@ export function App() {
     setCompanionStatus("fallback");
   }
 
-  function decideAuthorization(choice: "allow" | "deny") {
+  async function decideAuthorization(choice: "allow" | "deny") {
     const authorization = displayedPartnerState.authorization;
     if (!authorization || authorization.status !== "pending") {
       return;
     }
 
-    const decision = resolveAuthorizationDecision(authorization, choice);
-    setLocalAuthorizationDecisions((current) => ({
-      ...current,
-      [localAuthorizationDecisionKey(displayedPartnerState)]: decision
-    }));
+    const decidedAt = new Date();
+    const decision = resolveAuthorizationDecision(authorization, choice, decidedAt);
+    const decisionKey = localAuthorizationDecisionKey(displayedPartnerState);
+
+    const runId = displayedPartnerState.activeRunId ?? displayedPartnerState.runId;
+    if (!runId || displayedPartnerState.source === null) {
+      setLocalAuthorizationDecisions((current) => ({
+        ...current,
+        [decisionKey]: decision
+      }));
+      return;
+    }
+
+    try {
+      const snapshot = await applyWorkflowEvent({
+        schemaVersion: WORKFLOW_EVENT_SCHEMA_VERSION,
+        event_id: decisionEventId(authorization.id, choice, decision.decidedAt ?? decidedAt.toISOString()),
+        source: displayedPartnerState.source,
+        run_id: runId,
+        workflow_state: displayedPartnerState.workflowState,
+        timestamp: decision.decidedAt ?? decidedAt.toISOString(),
+        ...(displayedPartnerState.message === undefined ? {} : { message: displayedPartnerState.message }),
+        ...(displayedPartnerState.cardTitle === undefined ? {} : { card_title: displayedPartnerState.cardTitle }),
+        ...(displayedPartnerState.contextPath === undefined ? {} : { context_path: displayedPartnerState.contextPath }),
+        authorization: decision,
+        code_context_allowed: false
+      });
+      stateRevisionRef.current += 1;
+      setPartnerState(snapshot);
+      setLocalAuthorizationDecisions((current) => ({
+        ...current,
+        [decisionKey]: decision
+      }));
+      setStateCommandStatus("ok");
+    } catch {
+      setStateCommandStatus("fail");
+    }
   }
 
   function openContextMenu(event: React.MouseEvent<HTMLElement>) {
@@ -770,6 +813,61 @@ export function App() {
         aria-label="M0 window spike"
         onContextMenu={openContextMenu}
       >
+        {interactionCard.visible ? (
+          <section
+            className={`interaction-card is-${interactionCard.variant} tone-${interactionCard.tone}`}
+            aria-label="workflow interaction card"
+            aria-live="polite"
+          >
+            <header className="interaction-card-header">
+              <span className="state-indicator" aria-hidden>
+                {interactionCard.tone === "active" || interactionCard.tone === "attention" ? (
+                  <LoaderCircle size={14} />
+                ) : null}
+              </span>
+              <div>
+                <h2>{interactionCard.title}</h2>
+                <p>{interactionCard.statusText}</p>
+              </div>
+              <strong className="agent-badge">{interactionCard.sourceLabel}</strong>
+            </header>
+            <div className="interaction-meta" aria-label="workflow source details">
+              {interactionCard.meta.filter((item) => item.label !== "Agent").map((item) => (
+                <span key={item.label} title={item.title ?? item.value}>
+                  <b>{item.label}</b>
+                  <strong>{item.value}</strong>
+                </span>
+              ))}
+            </div>
+            {interactionCard.action ? (
+              <div className="interaction-actions">
+                {interactionCard.action.status === "pending" ? (
+                  <>
+                    <button
+                      className="decision-button deny"
+                      type="button"
+                      onClick={() => void decideAuthorization("deny")}
+                    >
+                      {interactionCard.action.denyLabel}
+                    </button>
+                    <button
+                      className="decision-button allow"
+                      type="button"
+                      onClick={() => void decideAuthorization("allow")}
+                    >
+                      {interactionCard.action.allowLabel}
+                    </button>
+                  </>
+                ) : (
+                  <div className={`decision-result ${interactionCard.action.status}`}>
+                    {interactionCard.action.status === "allowed" ? "Allowed" : "Denied"}
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
         <PartnerRenderer
           intent={animationIntent}
           frameIndex={frameIndex}
@@ -787,58 +885,6 @@ export function App() {
           <span>{stateDisplay.pausedLabel}</span>
           <strong>{activeCompanion.fallbackUsed || atlasFailed ? "fallback" : stateDisplay.workflowLabel}</strong>
         </div>
-
-        {interactionCard.visible ? (
-          <section
-            className={`interaction-card is-${interactionCard.variant} tone-${interactionCard.tone}`}
-            aria-label="workflow interaction card"
-            aria-live="polite"
-          >
-            <header className="interaction-card-header">
-              <span className="state-indicator" aria-hidden>
-                {interactionCard.tone === "active" || interactionCard.tone === "attention" ? (
-                  <LoaderCircle size={14} />
-                ) : null}
-              </span>
-              <div>
-                <h2>{interactionCard.title}</h2>
-                <p>{interactionCard.statusText}</p>
-              </div>
-              <strong>{interactionCard.sourceLabel}</strong>
-            </header>
-            {interactionCard.contextPath ? (
-              <div className="interaction-context" title={interactionCard.contextPath}>
-                {interactionCard.contextPath}
-              </div>
-            ) : null}
-            {interactionCard.action ? (
-              <div className="interaction-actions">
-                {interactionCard.action.status === "pending" ? (
-                  <>
-                    <button
-                      className="decision-button deny"
-                      type="button"
-                      onClick={() => decideAuthorization("deny")}
-                    >
-                      {interactionCard.action.denyLabel}
-                    </button>
-                    <button
-                      className="decision-button allow"
-                      type="button"
-                      onClick={() => decideAuthorization("allow")}
-                    >
-                      {interactionCard.action.allowLabel}
-                    </button>
-                  </>
-                ) : (
-                  <div className="decision-result">
-                    {interactionCard.action.status === "allowed" ? "Preview allowed only" : "Preview denied only"}
-                  </div>
-                )}
-              </div>
-            ) : null}
-          </section>
-        ) : null}
       </section>
 
       {contextMenuOpen ? (

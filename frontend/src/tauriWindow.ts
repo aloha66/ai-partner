@@ -1,6 +1,6 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { PartnerStateSnapshot } from "@ai-partner/contracts";
+import type { PartnerStateSnapshot, WorkflowEventWire } from "@ai-partner/contracts";
 import type { PartnerCapabilities } from "@ai-partner/resolver";
 import {
   isRegistered,
@@ -74,6 +74,10 @@ export async function getSpikeStatus(): Promise<SpikeStatus> {
 
 export async function getCurrentState(): Promise<PartnerStateSnapshot> {
   return invoke<PartnerStateSnapshot>("get_current_state");
+}
+
+export async function applyWorkflowEvent(event: WorkflowEventWire): Promise<PartnerStateSnapshot> {
+  return invoke<PartnerStateSnapshot>("apply_workflow_event", { event });
 }
 
 export async function listLocalCompanions(): Promise<CompanionCatalog> {

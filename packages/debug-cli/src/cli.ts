@@ -231,12 +231,18 @@ function readAuthorization(args: ParsedArgs) {
   if (!["command", "tool"].includes(kind)) {
     throw new DebugCliError("--auth-kind must be command or tool.", "usage");
   }
+  const status = readOptionalFlag(args, "auth-status") ?? "pending";
+  if (!["pending", "allowed", "denied"].includes(status)) {
+    throw new DebugCliError("--auth-status must be pending, allowed, or denied.", "usage");
+  }
+  const decidedAt = readOptionalFlag(args, "auth-decided-at");
   return {
     kind: kind as "command" | "tool",
     id,
     title: readOptionalFlag(args, "auth-title"),
     description,
-    status: "pending" as const
+    status: status as "pending" | "allowed" | "denied",
+    ...(decidedAt === undefined ? {} : { decidedAt })
   };
 }
 
@@ -262,7 +268,7 @@ function printHelp(): void {
 
 Usage:
   ai-partner-debug discover [--descriptor path]
-  ai-partner-debug send <state> [--message text] [--run-id run_id] [--context-path path] [--auth-id auth_id --auth-description text]
+  ai-partner-debug send <state> [--message text] [--run-id run_id] [--context-path path] [--auth-id auth_id --auth-description text] [--auth-status pending|allowed|denied]
   ai-partner-debug sequence [--delay-ms 500] [--run-id run_id]
 
 States:

@@ -42,6 +42,24 @@ describe("CLI args", () => {
       skipEndpointCheck: true
     });
   });
+
+  it("parses resolved authorization flags for manual smoke checks", () => {
+    const args = parseArgs([
+      "send",
+      "waiting",
+      "--auth-id",
+      "auth_debug_status",
+      "--auth-description",
+      "git status",
+      "--auth-status",
+      "allowed",
+      "--auth-decided-at",
+      "2026-06-03T00:00:00Z"
+    ]);
+
+    expect(args.flags.get("auth-status")).toBe("allowed");
+    expect(args.flags.get("auth-decided-at")).toBe("2026-06-03T00:00:00Z");
+  });
 });
 
 describe("debug CLI session", () => {
@@ -271,6 +289,38 @@ describe("workflow event sender", () => {
       code_context_allowed: false
     });
     expect(() => assertNoForbiddenFields(event)).not.toThrow();
+  });
+
+  it("can send resolved authorization events for command-line decision smoke checks", async () => {
+    const event = createWorkflowEvent({
+      state: "waiting",
+      runId: "run_auth_debug",
+      timestamp: new Date("2026-06-03T00:00:00Z"),
+      authorization: {
+        kind: "command",
+        id: "auth_debug_status",
+        description: "git status",
+        status: "allowed",
+        decidedAt: "2026-06-03T00:00:00Z"
+      }
+    });
+    let postedBody: unknown;
+
+    await sendWorkflowEvent(runtimeDescriptor({ port: 43172 }), event, {
+      post: async (_descriptor, body) => {
+        postedBody = JSON.parse(body);
+        return { status: 202, body: '{"ok":true}' };
+      }
+    });
+
+    expect(postedBody).toMatchObject({
+      workflow_state: "waiting",
+      authorization: {
+        id: "auth_debug_status",
+        status: "allowed",
+        decidedAt: "2026-06-03T00:00:00Z"
+      }
+    });
   });
 
   it("reports bad token responses and connection failures", async () => {

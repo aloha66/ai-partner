@@ -42,14 +42,14 @@ const sourceLabels: Record<WorkflowSource, string> = {
   cli: "debug cli",
   "codex-wrapper": "codex",
   "demo-script": "demo",
-  "claude-hook": "hook event"
+  "claude-hook": "claude code"
 };
 
 const cardSourceLabels: Record<WorkflowSource, string> = {
   cli: "Debug CLI",
   "codex-wrapper": "Codex",
   "demo-script": "Demo",
-  "claude-hook": "Hook event"
+  "claude-hook": "Claude Code"
 };
 
 export interface PartnerStateDisplay {
@@ -72,6 +72,12 @@ export interface InteractiveCardAction {
   denyLabel: string;
 }
 
+export interface InteractiveCardMeta {
+  label: string;
+  value: string;
+  title?: string;
+}
+
 export interface InteractiveCardView {
   visible: boolean;
   variant: "status" | "authorization";
@@ -80,6 +86,7 @@ export interface InteractiveCardView {
   statusText: string;
   contextPath: string | null;
   sourceLabel: string;
+  meta: InteractiveCardMeta[];
   action: InteractiveCardAction | null;
 }
 
@@ -114,12 +121,13 @@ export function interactiveCardView(snapshot: PartnerStateSnapshot | null): Inte
       statusText: authorization.description,
       contextPath: state.contextPath ?? null,
       sourceLabel: state.source === null ? "Unknown" : cardSourceLabels[state.source],
+      meta: cardMeta(state),
       action: {
         id: authorization.id,
         kind: authorization.kind,
         status: authorization.status,
-        allowLabel: "Preview allow",
-        denyLabel: "Preview deny"
+        allowLabel: "Allow",
+        denyLabel: "Deny"
       }
     };
   }
@@ -133,6 +141,7 @@ export function interactiveCardView(snapshot: PartnerStateSnapshot | null): Inte
       statusText: defaultMessages.idle,
       contextPath: null,
       sourceLabel: "None",
+      meta: [],
       action: null
     };
   }
@@ -145,6 +154,7 @@ export function interactiveCardView(snapshot: PartnerStateSnapshot | null): Inte
     statusText: state.message ?? defaultMessages[state.workflowState],
     contextPath: state.contextPath ?? null,
     sourceLabel: state.source === null ? "Unknown" : cardSourceLabels[state.source],
+    meta: cardMeta(state),
     action: null
   };
 }
@@ -174,6 +184,51 @@ export function localAuthorizationDecisionKey(snapshot: PartnerStateSnapshot): s
     snapshot.updatedAt,
     authorization.id
   ].join(":");
+}
+
+function cardMeta(state: PartnerStateSnapshot): InteractiveCardMeta[] {
+  const context = contextLabels(state.contextPath);
+  return [
+    {
+      label: "Project",
+      value: context.project,
+      title: state.contextPath
+    },
+    {
+      label: "Worktree",
+      value: context.worktree,
+      title: state.contextPath
+    },
+    {
+      label: "Agent",
+      value: state.source === null ? "Unknown" : cardSourceLabels[state.source]
+    }
+  ];
+}
+
+function contextLabels(contextPath: string | undefined): { project: string; worktree: string } {
+  if (!contextPath) {
+    return {
+      project: "Unknown",
+      worktree: "unknown"
+    };
+  }
+
+  const segments = contextPath.split(/[\\/]+/).filter(Boolean);
+  const project = segments[segments.length - 1] ?? contextPath;
+  const worktreeIndex = segments.findIndex((segment) => segment === "worktrees");
+  if (worktreeIndex >= 0 && segments[worktreeIndex + 1]) {
+    const worktreeId = segments[worktreeIndex + 1];
+    return {
+      project,
+      worktree: project === worktreeId ? worktreeId : `${worktreeId}/${project}`
+    };
+  }
+
+  return {
+    project,
+    worktree: "main"
+  };
 }
 
 function statusTitle(state: WorkflowState): string {

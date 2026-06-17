@@ -91,6 +91,22 @@ describe("partner state display", () => {
       statusText: "正在执行 pnpm test",
       contextPath: "/Users/aloha66/code/ai-partner",
       sourceLabel: "Codex",
+      meta: [
+        {
+          label: "Project",
+          value: "ai-partner",
+          title: "/Users/aloha66/code/ai-partner"
+        },
+        {
+          label: "Worktree",
+          value: "main",
+          title: "/Users/aloha66/code/ai-partner"
+        },
+        {
+          label: "Agent",
+          value: "Codex"
+        }
+      ],
       action: null
     });
   });
@@ -122,13 +138,29 @@ describe("partner state display", () => {
       title: "Command approval preview",
       statusText: "git status",
       contextPath: "/Users/aloha66/code/ai-partner",
-      sourceLabel: "Hook event",
+      sourceLabel: "Claude Code",
+      meta: [
+        {
+          label: "Project",
+          value: "ai-partner",
+          title: "/Users/aloha66/code/ai-partner"
+        },
+        {
+          label: "Worktree",
+          value: "main",
+          title: "/Users/aloha66/code/ai-partner"
+        },
+        {
+          label: "Agent",
+          value: "Claude Code"
+        }
+      ],
       action: {
         id: "auth_git_status",
         kind: "command",
         status: "pending",
-        allowLabel: "Preview allow",
-        denyLabel: "Preview deny"
+        allowLabel: "Allow",
+        denyLabel: "Deny"
       }
     });
 
@@ -166,6 +198,29 @@ describe("partner state display", () => {
     };
 
     expect(localAuthorizationDecisionKey(first)).not.toBe(localAuthorizationDecisionKey(second));
+  });
+
+  it("summarizes codex worktree paths without leaking the full path into compact metadata", () => {
+    expect(
+      interactiveCardView({
+        ...idlePartnerState,
+        workflowState: "waiting",
+        runId: "run_auth_1",
+        activeRunId: "run_auth_1",
+        source: "codex-wrapper",
+        contextPath: "/Users/aloha66/.codex/worktrees/58a6/ai-partner",
+        authorization: {
+          kind: "command",
+          id: "auth_git_status",
+          description: "pnpm test",
+          status: "pending"
+        }
+      }).meta
+    ).toMatchObject([
+      { label: "Project", value: "ai-partner" },
+      { label: "Worktree", value: "58a6/ai-partner" },
+      { label: "Agent", value: "Codex" }
+    ]);
   });
 
 });
