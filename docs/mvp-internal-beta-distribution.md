@@ -1,6 +1,6 @@
 # AI Partner MVP 内测分发说明
 
-日期：2026-06-16
+日期：2026-06-18
 对象：1-3 位 Apple Silicon macOS 技术内测者。
 
 这份文档是当前内部 DMG 的测试者操作单。Release 身份、范围、ready 证据、已知限制和非 MVP 清单以 [MVP Release Handoff](./mvp-release-handoff.md) 为准；如果本文和 handoff 冲突，以 handoff 为准。
@@ -8,11 +8,11 @@
 ## 制品
 
 - DMG：`/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/dmg/AI Partner_0.1.0_aarch64.dmg`
-- 大小：3,144,504 bytes
-- SHA256：`26ad69629e4ead31c29340a3763f97a928a123b8143f9817c9284f398a536cd4`
-- 产品源码 commit：`0098ec2901e244aa16cac00a324d3c440fc42762` (`0098ec2 Merge pull request #2 from aloha66/codex/selector-v1`)
+- 大小：3,169,209 bytes
+- SHA256：`e6e27c086916f7e0e3238afe1871b062ee9118597996e06668d046686af9d23e`
+- 产品源码 commit：`42b742e04ddd87e303e45dc2a5084926146084c5` (`42b742e fix: follow up interactive workflow card semantics`)
 - Release handoff：`docs/mvp-release-handoff.md`
-- 本轮制品包含 PR #2 merge 后的本地伴侣 selector/source variant/search empty state 刷新，并保留 MVP 本机事件流 smoke 通过状态。
+- 本轮制品包含 PR #4 merge 后的 interactive workflow card / authorization card 语义刷新，并保留本地伴侣 selector、runtime descriptor、packaged endpoint 和 stale descriptor smoke 通过状态。
 
 安装前先校验 checksum：
 
@@ -23,21 +23,23 @@ shasum -a 256 "/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/dm
 预期输出以这段开头：
 
 ```text
-26ad69629e4ead31c29340a3763f97a928a123b8143f9817c9284f398a536cd4
+e6e27c086916f7e0e3238afe1871b062ee9118597996e06668d046686af9d23e
 ```
 
 ## 本轮 smoke 证据摘要
 
-- `pnpm run package:dmg` 通过，产出 packaged app 和 DMG；本轮没有使用 `pnpm tauri:dev`。
-- DMG 以 read-only 方式挂载并通过 image CRC 校验；卷内包含 `AI Partner.app` 和 `Applications -> /Applications` symlink。
-- 从 DMG 复制到 `/private/tmp/ai-partner-dmg-smoke.p8WjQ0/install/AI Partner.app` 后以后台方式启动 packaged app。
-- packaged app 写出 runtime descriptor；目录权限 `0700`，文件权限 `0600`，token 只记录长度 64，不记录明文。
-- `pnpm debug:discover` 找到 packaged endpoint `http://127.0.0.1:54083/events`。
-- `pnpm debug:send running/reading/waiting/done` 均发送成功，run id 为 `run_smoke_20260616T130915Z`。
+- `pnpm smoke:dmg:preflight` 通过，锁住 Tauri package config、DMG target、透明无边框 520x360 窗口、不抢焦点配置、asset protocol scope 和 CSP。
+- `pnpm package:dmg` 通过。普通 sandbox 下 `hdiutil create` 先返回“设备未配置”；按规则提权重跑同一命令后产出 packaged app 和 DMG。本轮没有使用 `pnpm tauri:dev`。
+- packaged app 从 `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/macos/AI Partner.app` 以 `open -g -n` 后台启动。
+- packaged app 写出 runtime descriptor：`appInstanceId=app_20260618T002008Z_19066_34bf036baaef20ad`，pid `19066`，port `58481`，`createdAt=2026-06-18T00:20:08.373788+00:00`；目录权限 `0700`，文件权限 `0600`，token 只记录长度 64，不记录明文。
+- `pnpm debug:discover` 找到 packaged endpoint `http://127.0.0.1:58481/events`。
+- `pnpm debug:send waiting` 携带 PR #4 authorization card 元数据发送成功：`run_id=run_smoke_20260618T002008Z`，`card_title=Install internal beta`，`context_path=docs/mvp-release-handoff.md`，`authorization.id=auth_pr4_internal_beta`，`authorization.status=pending`。
+- `pnpm debug:send done --run-id run_smoke_20260618T002008Z` 对同一 run 发送成功，覆盖 interactive workflow card 从 waiting 到 done 的收口。
+- 启动、waiting、done 和退出后的前台 app 均保持 `Codex`，未抢焦点。
 - release 默认无 M0 debug panel：production build 和 `debugMode.test.ts` 均通过。
 - selector/source variant/search empty state 基本可用：`AppProductUiBoundary.test.ts`、`companionSelector.test.ts` 和完整 frontend test run 通过。
 - 本机 Artoria/Anya 伴侣路径存在且非空：`~/.petdex/pets/{artoria,anya-2}` 与 `~/.codex/pets/{artoria,anya-2}` 均有 `pet.json` 和 `spritesheet.webp`；相关真实素材 smoke、selector view-model 和 store 测试通过，未复制或提交任何私有宠物素材。
-- 退出 packaged app 后，旧 descriptor 被 `debug:discover --descriptor` 判定为 `descriptor_stale`，旧 port 不再监听。
+- 退出 packaged app 后，旧 descriptor copy `/private/tmp/ai-partner-pr4-runtime-descriptor-stale.json` 被 `debug:discover --descriptor` 判定为 `descriptor_stale: Runtime descriptor process is not alive.`，旧 port `58481` 不再监听。
 
 ## 安装步骤
 
