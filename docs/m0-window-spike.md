@@ -283,6 +283,18 @@ pnpm tauri:dev
 - 退出/lifecycle 通过：停止最终 packaged app 实例 pid `72696` 后，`pnpm debug:discover` 返回 `descriptor_stale: Runtime descriptor process is not alive.`，WindowServer 查询返回 `no AI Partner windows`。
 - 工具限制说明：本轮 Computer Use permissions 一直 pending；透明 accessory WKWebView 对合成 right-click/AX click 不稳定，fresh instance 在 selector focusability 变化后 AX 只暴露 app/menu bar 而不再暴露 window tree。因此 theme 三态视觉切换、open-local-pets、click-through 6s 和退出按钮没有取得新的 literal hand-click 截图；它们由已打开的 release 菜单标签、focused frontend/Rust tests、既有 2026-06-15 review fixes 和本轮 packaged endpoint/window-only evidence 覆盖。本轮未发现需要修改产品代码的 blocker。
 
+2026-06-18 PR #4 internal beta packaged smoke：
+
+- 起点：分支 `codex/internal-beta-refresh-pr4`，HEAD `42b742e fix: follow up interactive workflow card semantics`；开始工作区只剩未跟踪 `.agents/`，未提交 `.agents/` 或本机宠物素材。
+- 验证通过：`pnpm --filter @ai-partner/contracts test`（19 tests）、`pnpm --filter @ai-partner/frontend test`（83 tests）、`cargo test --manifest-path src-tauri/Cargo.toml`（lib 53 + fixture integration 3）、`pnpm smoke:dmg:preflight`、`pnpm package:dmg`、`shasum -a 256`。`pnpm package:dmg` 在 sandbox 下首次到 `hdiutil create` 返回“设备未配置”，按规则提权重跑同一命令后通过。
+- 生成 DMG：`/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/dmg/AI Partner_0.1.0_aarch64.dmg`，大小 `3,169,209 bytes`，SHA256 `e6e27c086916f7e0e3238afe1871b062ee9118597996e06668d046686af9d23e`。packaged app 位于 `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/macos/AI Partner.app`，`du -sk` 为 `8864`。
+- 使用 packaged app，不使用 `pnpm tauri:dev`：通过 `open -g -n` 后台启动 release `.app`。runtime descriptor 写出到 `${TMPDIR}/ai-partner/runtime-descriptor.json`，目录权限 `0700`、文件权限 `0600`，`appInstanceId=app_20260618T002008Z_19066_34bf036baaef20ad`，pid `19066`，port `58481`，`createdAt=2026-06-18T00:20:08.373788+00:00`，token 只记录 `tokenLength=64`。
+- `pnpm debug:discover` 在普通 sandbox 下可读 descriptor，但 localhost probe 返回 `EPERM 127.0.0.1:58481`；提权后通过，发现 `http://127.0.0.1:58481/events`。`lsof` 确认 packaged `ai-partner` 监听 `127.0.0.1:58481`。
+- PR #4 interactive/authorization card evidence：`pnpm debug:send waiting --run-id run_smoke_20260618T002008Z --card-title "Install internal beta" --context-path docs/mvp-release-handoff.md --auth-id auth_pr4_internal_beta --auth-title "Allow packaged smoke" --auth-description "Allow PR4 internal beta packaged smoke action" --auth-kind command --auth-status pending` 被 packaged endpoint 接受；随后 `pnpm debug:send done --run-id run_smoke_20260618T002008Z` 对同一 run 成功。该 smoke 覆盖 authorization card pending metadata 和 interactive workflow card waiting -> done 收口，适合记录为 PR #4 后证据。
+- 不抢焦点复核通过：packaged app 启动后、waiting 后、done 后、退出后，`osascript` 读取前台应用均为 `Codex`；AI Partner 未成为输入焦点。sandbox 下首次 `System Events` 查询返回 `-10827`，提权后通过。
+- Stale descriptor 复核通过：退出 pid `19066` 后旧 port `58481` 无监听；旧 descriptor copy `/private/tmp/ai-partner-pr4-runtime-descriptor-stale.json` 下 `pnpm debug:discover --descriptor ...` 返回 `descriptor_stale: Runtime descriptor process is not alive.`。
+- 本轮未使用全屏截图，也未扩大截图范围。证据来自 package metadata、runtime descriptor 权限、localhost endpoint discovery/debug send、`lsof`、frontmost app metadata、stale descriptor negative check，以及 contracts/frontend/Rust 测试。
+
 M0 acceptance 当前状态：通过。透明无边框、置顶、不抢焦点、拖动、click-through 恢复、Spaces/fullscreen、CSS sprite frame alignment 均已验证通过；可以进入 M1 最小 Rust State Bridge。
 
 ## M1 Rust State Bridge 进展
