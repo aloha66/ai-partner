@@ -53,6 +53,35 @@ e6e27c086916f7e0e3238afe1871b062ee9118597996e06668d046686af9d23e
 3. 启动复制后的 `AI Partner.app`。本轮内测请测试 DMG 里的 packaged app，不要用 `pnpm tauri:dev`。
 4. 如果 macOS 因“无法验证开发者”拦截启动，请先确认上面的 SHA256 一致，再通过 Finder 的“打开”流程或“隐私与安全性”里的提示允许这一个 app。
 
+## Codex `/partner` 入口
+
+本轮也支持把 AI Partner 当作 Codex 里的显式开关使用。首次设置时在仓库根目录运行：
+
+```bash
+pnpm partner:install
+```
+
+之后用户输入 `/partner` 时，skill 应在仓库根目录运行 `pnpm partner`；也可以直接运行 `pnpm partner` 做同样的日常开关。
+
+- Codex 当前从 repo-local `.agents/skills/<name>` 或用户级 `~/.codex/skills/<name>` 发现 slash-command skill；本仓库把可提交源文件放在 `skills/partner/`。
+- `pnpm partner:install` 会构建 debug CLI、把 `skills/partner/` 同步到 `.agents/skills/partner/`、安装/更新全局 Codex hooks，并运行 hook check。
+- 第一次运行：后台打开 packaged `AI Partner.app`，写出 runtime descriptor，之后 hook/wrapper 可以向本机 endpoint 发送 workflow 状态。
+- 再运行一次：读取同一个 runtime descriptor，向 `127.0.0.1` 的 `/control/quit` 发送 bearer-token 保护的退出请求，让 companion 退出。
+- 日常 `/partner` / `pnpm partner` 不跑 `pnpm tauri:dev`、不重新打包、不运行 `hdiutil`，只负责显示/退出 companion。
+- 日常 `pnpm partner` 不会静默写全局 Codex 配置；如果 hooks 缺失，它只会提示运行 `pnpm partner:install`。
+- 如果 app 已复制到其它位置，可用 `pnpm partner -- --app-path "/Applications/AI Partner.app"` 或 `AI_PARTNER_APP_PATH` 指定。
+
+## Codex 全局状态 hook
+
+`/partner` 只负责显示或退出 companion；如果要让当前 Codex Desktop 会话自动从 idle 进入 running/reading/editing/waiting/done，需要安装全局 Codex hook：
+
+首次设置优先运行 `pnpm partner:install`。只想单独检查或重装 hooks 时，也可以运行 `pnpm codex:hooks:check` 或 `pnpm codex:hooks:install`。
+
+- hook 安装到 `${CODEX_HOME:-~/.codex}/hooks.json`，采用 Petdex 风格的全局监听；AI Partner 是桌面级伴侣，应跟随 Codex 的所有项目和线程，而不是只在本仓库工作树里生效。
+- 项目内只提交 hook sender 和安装/检查脚本；不会在日常 `/partner` / `pnpm partner` 时自动写全局配置。
+- `codex-hook` 事件源只发送安全 workflow 元数据：事件名、状态、run id、短消息和 `code_context_allowed=false`；不发送 prompt、code、diff、clipboard、file content 或 screen text。
+- `codex:wrap` 仍保留给明确通过 wrapper 启动的 Codex 子进程；它不能覆盖当前 Codex Desktop 会话本身。
+
 ## macOS 签名限制
 
 这个构建只适合小范围技术内测：
@@ -75,13 +104,14 @@ e6e27c086916f7e0e3238afe1871b062ee9118597996e06668d046686af9d23e
 请按下面任务记录结果。通过项可以简短写；失败项请写清楚步骤、macOS 版本、Apple Silicon 机型，并附上有帮助的截图或终端输出。
 
 1. 挂载 DMG，复制 app，启动复制后的 packaged app，确认默认 `AI Partner M0` 窗口出现。
-2. 确认首次启动不会抢走当前前台 app 的输入焦点。
-3. 在仓库根目录运行 `pnpm debug:discover`，确认能找到 packaged app 的本机 `127.0.0.1` endpoint。
-4. 运行 `pnpm debug:send waiting`，确认 UI 显示 waiting 状态、source/status 信息，以及可见的消息或气泡。
-5. 运行 `pnpm debug:send done`，确认同一个 run 完成，并在短暂延迟后回到 idle。
-6. 在另一个 app 里打字时，再运行一次 `pnpm debug:send waiting`，确认 AI Partner 保持可见但不会变成 focused app。
-7. 按你的日常桌面环境试一下 M0 窗口交互：拖动窗口、如果可见则试 click-through/quiet 行为、切换 Spaces 或 fullscreen app，再回到普通桌面确认 app 仍可用。
-8. 退出并重新启动 packaged app。再次运行 `pnpm debug:discover`，确认事件仍能打到新的运行实例。
+2. 如需验证真实 Codex slash command，先运行 `pnpm partner:install`，再在 Codex 中输入 `/partner`；也可在仓库根目录直接运行 `pnpm partner`，确认第一次能打开 companion，再运行一次会退出 companion。
+3. 确认首次启动不会抢走当前前台 app 的输入焦点。
+4. 在仓库根目录运行 `pnpm debug:discover`，确认能找到 packaged app 的本机 `127.0.0.1` endpoint。
+5. 运行 `pnpm debug:send waiting`，确认 UI 显示 waiting 状态、source/status 信息，以及可见的消息或气泡。
+6. 运行 `pnpm debug:send done`，确认同一个 run 完成，并在短暂延迟后回到 idle。
+7. 在另一个 app 里打字时，再运行一次 `pnpm debug:send waiting`，确认 AI Partner 保持可见但不会变成 focused app。
+8. 按你的日常桌面环境试一下 M0 窗口交互：拖动窗口、如果可见则试 click-through/quiet 行为、切换 Spaces 或 fullscreen app，再回到普通桌面确认 app 仍可用。
+9. 退出并重新启动 packaged app。再次运行 `pnpm debug:discover`，确认事件仍能打到新的运行实例。
 
 ## 反馈模板
 

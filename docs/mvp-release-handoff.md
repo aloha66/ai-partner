@@ -12,6 +12,9 @@ Date: 2026-06-18
 - DMG SHA256: `e6e27c086916f7e0e3238afe1871b062ee9118597996e06668d046686af9d23e`
 - Packaged app path: `/Users/aloha66/code/ai-partner/src-tauri/target/release/bundle/macos/AI Partner.app`
 - Packaged app size: about `8.7 MiB` (`8,864 KiB` by `du -sk`).
+- Codex setup after this handoff: run `pnpm partner:install` once to build the debug CLI, sync `.agents/skills/partner`, install/update global Codex hooks, and run the hook check.
+- Codex entrypoint after setup: `/partner` should map to `pnpm partner`, which toggles the packaged companion on first run and exits it on the next run through the authenticated local control endpoint.
+- Live Codex Desktop workflow states require the global hook listener installed by `pnpm partner:install`; `/partner` only toggles the companion window.
 
 ## Install
 
@@ -56,6 +59,10 @@ Readiness evidence is complete in:
 - External multi-display behavior is a roadmap/risk note, not an MVP guarantee.
 - Current Codex Computer Use permissions were still pending for Accessibility and Screen Recording, so this smoke did not rely on automated screenshots or WebView text extraction as proof. The evidence uses package metadata, runtime descriptor permissions, localhost endpoint discovery, authorization-bearing debug event acceptance, focus checks, `lsof` process/port checks, and existing renderer/selector/real-asset tests.
 - macOS process/window automation is permission-sensitive in this environment: sandboxed `pgrep`, `ps`, localhost probing, and `hdiutil` operations can fail with permission or device errors unless run with explicit local approval. Treat those as test-harness limits, not product runtime failures.
+- `/partner` is a repo-level skill/CLI entrypoint, not a globally installed user skill. Codex discovers repo-local skills from `.agents/skills/<name>` and user skills from `~/.codex/skills/<name>`; the committed source lives in `skills/partner/`. Run `pnpm partner:install` for normal setup, or `pnpm skill:partner:sync` only when you intend to sync that skill root by itself.
+- The Codex status listener is intentionally global, not repo-local, matching the Petdex model. The hook config lives in `${CODEX_HOME:-~/.codex}/hooks.json` after explicit install, while this repository only carries the safe `codex-hook` sender and install/check scripts. It sends workflow metadata only and keeps prompt text, code, diffs, clipboard, file contents, and screen text out of the ingress payload.
+- Daily `/partner` / `pnpm partner` does not silently write global Codex configuration. If hooks are missing, it prints a `pnpm partner:install` prompt instead.
+- The packaged app described above predates the latest `/control/quit` and Codex hook installer source changes; verify those again only after an explicit rebuild/package pass.
 
 ## Explicitly non-MVP
 
