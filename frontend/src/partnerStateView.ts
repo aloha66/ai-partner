@@ -42,14 +42,16 @@ const sourceLabels: Record<WorkflowSource, string> = {
   cli: "debug cli",
   "codex-wrapper": "codex",
   "demo-script": "demo",
-  "claude-hook": "claude code"
+  "claude-hook": "claude code",
+  "codex-hook": "codex hook"
 };
 
 const cardSourceLabels: Record<WorkflowSource, string> = {
   cli: "Debug CLI",
   "codex-wrapper": "Codex",
   "demo-script": "Demo",
-  "claude-hook": "Claude Code"
+  "claude-hook": "Claude Code",
+  "codex-hook": "Codex Hook"
 };
 
 export interface PartnerStateDisplay {

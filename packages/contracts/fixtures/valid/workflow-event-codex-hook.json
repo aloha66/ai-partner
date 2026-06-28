@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "ai-partner.workflow-event.v1",
+  "event_id": "evt_20260620_codex_hook",
+  "source": "codex-hook",
+  "run_id": "run_codex_hook_turn_123",
+  "workflow_state": "editing",
+  "timestamp": "2026-06-20T00:00:00Z",
+  "message": "Codex is editing",
+  "code_context_allowed": false
+}

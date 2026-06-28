@@ -27,6 +27,7 @@ pub enum WorkflowSource {
     CodexWrapper,
     DemoScript,
     ClaudeHook,
+    CodexHook,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]

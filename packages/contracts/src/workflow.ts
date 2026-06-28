@@ -14,7 +14,8 @@ export const workflowSources = [
   "cli",
   "codex-wrapper",
   "demo-script",
-  "claude-hook"
+  "claude-hook",
+  "codex-hook"
 ] as const;
 export const workflowEventSources = workflowSources;
 

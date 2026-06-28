@@ -25,7 +25,7 @@
     },
     "source": {
       "type": "string",
-      "enum": ["cli", "codex-wrapper", "demo-script", "claude-hook"]
+      "enum": ["cli", "codex-wrapper", "demo-script", "claude-hook", "codex-hook"]
     },
     "run_id": {
       "type": "string",
