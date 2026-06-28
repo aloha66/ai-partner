@@ -47,14 +47,20 @@ describe("sprite renderer model", () => {
       width: 173,
       height: 187
     });
+    if (model.sourceKind !== "petdex-row") {
+      throw new Error("idle should use a Petdex row");
+    }
     expect(model.atlasStyle).toMatchObject({
       width: 1384,
       height: 1683,
       transform: "translate3d(-0px, -0px, 0)"
     });
-    expect(spriteRenderModelForIntent(resolvePartnerIntent(snapshot("idle"), "normal"), 0, "asset://localhost/%2Ftmp%2Fspritesheet.webp").atlasKind).toBe("asset");
-    expect(spriteRenderModelForIntent(resolvePartnerIntent(snapshot("idle"), "normal"), 0, "data:image/svg+xml,probe").atlasKind).toBe("probe");
-    expect(spriteRenderModelForIntent(resolvePartnerIntent(snapshot("idle"), "normal"), 0, "https://example.test/spritesheet.webp").atlasKind).toBe("url");
+    const assetModel = spriteRenderModelForIntent(resolvePartnerIntent(snapshot("idle"), "normal"), 0, "asset://localhost/%2Ftmp%2Fspritesheet.webp");
+    const probeModel = spriteRenderModelForIntent(resolvePartnerIntent(snapshot("idle"), "normal"), 0, "data:image/svg+xml,probe");
+    const urlModel = spriteRenderModelForIntent(resolvePartnerIntent(snapshot("idle"), "normal"), 0, "https://example.test/spritesheet.webp");
+    expect(assetModel.sourceKind === "petdex-row" ? assetModel.atlasKind : undefined).toBe("asset");
+    expect(probeModel.sourceKind === "petdex-row" ? probeModel.atlasKind : undefined).toBe("probe");
+    expect(urlModel.sourceKind === "petdex-row" ? urlModel.atlasKind : undefined).toBe("url");
   });
 
   it("maps resolver legacy animations to Petdex atlas rows", () => {
@@ -62,6 +68,10 @@ describe("sprite renderer model", () => {
     const model = spriteRenderModelForIntent(intent, 3, "probe-atlas");
 
     expect(model.animation).toBe("legacy.review");
+    expect(model.sourceKind).toBe("petdex-row");
+    if (model.sourceKind !== "petdex-row") {
+      throw new Error("legacy review should use Petdex row rendering");
+    }
     expect(model.row).toBe("review");
     expect(model.frame).toMatchObject({
       row: "review",
@@ -82,18 +92,30 @@ describe("sprite renderer model", () => {
     expect(model.className).toBe("sprite-frame is-looping");
   });
 
-  it("maps loaded canonical resolver intents to Petdex probe rows", () => {
+  it("uses explicit Petdex row sources for loaded canonical resolver intents", () => {
     const intent = resolvePartnerIntent(snapshot("reading"), "normal", {
       capabilities: {
         partnerId: "loaded-partner",
         animations: {
           "workflow.reading": {
             animation: "workflow.reading",
-            loop: true
+            loop: true,
+            source: {
+              kind: "petdex-row",
+              row: "review",
+              frameCount: 6,
+              fps: 6
+            }
           },
           "legacy.idle": {
             animation: "legacy.idle",
-            loop: true
+            loop: true,
+            source: {
+              kind: "petdex-row",
+              row: "idle",
+              frameCount: 6,
+              fps: 6
+            }
           }
         },
         fallbacks: {},
@@ -109,6 +131,10 @@ describe("sprite renderer model", () => {
     const model = spriteRenderModelForIntent(intent, 2, "probe-atlas");
 
     expect(model.animation).toBe("workflow.reading");
+    expect(model.sourceKind).toBe("petdex-row");
+    if (model.sourceKind !== "petdex-row") {
+      throw new Error("workflow.reading should use explicit Petdex row source");
+    }
     expect(model.row).toBe("review");
     expect(model.frame).toMatchObject({
       row: "review",
@@ -125,7 +151,7 @@ describe("sprite renderer model", () => {
             0,
             "probe-atlas"
           );
-          return [workflowState, model.row];
+          return [workflowState, model.sourceKind === "petdex-row" ? model.row : "missing"];
         }
       )
     )).toEqual({
@@ -148,6 +174,10 @@ describe("sprite renderer model", () => {
     const model = spriteRenderModelForIntent(intent, 1, "probe-atlas");
 
     expect(model.animation).toBe("legacy.running-right");
+    expect(model.sourceKind).toBe("petdex-row");
+    if (model.sourceKind !== "petdex-row") {
+      throw new Error("legacy running-right should use Petdex row rendering");
+    }
     expect(model.row).toBe("running-right");
     expect(model.procedural).toEqual(["shake"]);
     expect(model.className).toBe("sprite-frame is-looping effect-shake");
@@ -165,6 +195,10 @@ describe("sprite renderer model", () => {
 
     expect(replayed.body.animation).toBe("legacy.waving");
     expect(model.animation).toBe("legacy.waving");
+    expect(model.sourceKind).toBe("petdex-row");
+    if (model.sourceKind !== "petdex-row") {
+      throw new Error("legacy waving should use Petdex row rendering");
+    }
     expect(model.row).toBe("waving");
     expect(model.loop).toBe(false);
     expect(model.className).toBe("sprite-frame is-once");
@@ -180,7 +214,8 @@ describe("sprite renderer model", () => {
     expect(normalizeSpriteColumn(Number.NaN)).toBe(0);
 
     const intent = resolvePartnerIntent(snapshot("idle"), "normal");
-    expect(spriteRenderModelForIntent(intent, 10, "probe-atlas").frame.columnIndex).toBe(4);
+    const model = spriteRenderModelForIntent(intent, 10, "probe-atlas");
+    expect(model.sourceKind === "petdex-row" ? model.frame.columnIndex : undefined).toBe(4);
   });
 
   it("skips Petdex transparent padding columns for rows with fewer visible frames", () => {
@@ -195,44 +230,84 @@ describe("sprite renderer model", () => {
       "probe-atlas"
     );
 
+    expect(waiting.sourceKind).toBe("petdex-row");
+    if (waiting.sourceKind !== "petdex-row") {
+      throw new Error("legacy waiting should use Petdex row rendering");
+    }
     expect(waiting.row).toBe("waiting");
     expect(waiting.frame.columnIndex).toBe(1);
   });
 
-  it("maps canonical intent refs to default Petdex rows before legacy fallback", () => {
-    const canonicalByRow: Array<[AnimationIntent["body"]["animation"], string]> = [
-      ["workflow.idle", "idle"],
-      ["workflow.running", "running"],
-      ["workflow.reading", "review"],
-      ["workflow.editing", "running"],
-      ["workflow.waiting", "waiting"],
-      ["workflow.error", "failed"],
-      ["workflow.done", "waving"],
-      ["physical.carried", "idle"],
-      ["physical.struggling", "running-left"],
-      ["physical.falling", "idle"],
-      ["physical.recovering", "idle"]
+  it("keeps Petdex 9-row legacy compatibility mapping unchanged", () => {
+    const legacyByRow: Array<[AnimationIntent["body"]["animation"], string]> = [
+      ["legacy.idle", "idle"],
+      ["legacy.running-right", "running-right"],
+      ["legacy.running-left", "running-left"],
+      ["legacy.waving", "waving"],
+      ["legacy.jumping", "jumping"],
+      ["legacy.failed", "failed"],
+      ["legacy.waiting", "waiting"],
+      ["legacy.running", "running"],
+      ["legacy.review", "review"]
     ];
 
-    expect(Object.fromEntries(canonicalByRow.map(([animation]) => [
+    expect(Object.fromEntries(legacyByRow.map(([animation]) => [
       animation,
       petdexRowForAnimation(animation)
-    ]))).toEqual(Object.fromEntries(canonicalByRow));
+    ]))).toEqual(Object.fromEntries(legacyByRow));
   });
 
-  it("falls back unknown non-legacy body animations to the idle row", () => {
+  it("renders PNG frame sequence sources without mapping workflow.done to Petdex waving", () => {
+    const intent: AnimationIntent = {
+      schemaVersion: ANIMATION_INTENT_SCHEMA_VERSION,
+      body: {
+        animation: "workflow.done",
+        procedural: [],
+        loop: false,
+        source: {
+          kind: "png-sequence",
+          frames: ["asset://localhost/done/000.png", "asset://localhost/done/001.png"],
+          fps: 8
+        }
+      },
+      bubble: null,
+      queued: []
+    };
+    const model = spriteRenderModelForIntent(intent, 3, "probe-atlas");
+
+    expect(model).toMatchObject({
+      animation: "workflow.done",
+      sourceKind: "png-sequence",
+      frameUrl: "asset://localhost/done/001.png",
+      frameIndex: 1,
+      frameCount: 2,
+      fps: 8,
+      loop: false
+    });
+  });
+
+  it("does not silently render missing custom animations as the Petdex idle row", () => {
     const intent: AnimationIntent = {
       schemaVersion: ANIMATION_INTENT_SCHEMA_VERSION,
       body: {
         animation: "workflow.unknown",
         procedural: [],
-        loop: true
+        loop: true,
+        source: {
+          kind: "missing",
+          reason: "animation-unavailable"
+        }
       },
       bubble: null,
       queued: []
     };
+    const model = spriteRenderModelForIntent(intent, 0, "probe-atlas");
 
-    expect(petdexRowForAnimation(intent.body.animation)).toBe("idle");
-    expect(spriteRenderModelForIntent(intent, 0, "probe-atlas").row).toBe("idle");
+    expect(() => petdexRowForAnimation(intent.body.animation)).toThrow(/does not have a Petdex row/);
+    expect(model).toMatchObject({
+      animation: "workflow.unknown",
+      sourceKind: "missing"
+    });
+    expect(model).not.toHaveProperty("row");
   });
 });

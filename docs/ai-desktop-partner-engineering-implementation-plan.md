@@ -634,7 +634,13 @@ Rules:
   "body": {
     "animation": "legacy.review",
     "procedural": [],
-    "loop": true
+    "loop": true,
+    "source": {
+      "kind": "petdex-row",
+      "row": "review",
+      "frameCount": 6,
+      "fps": 6
+    }
   },
   "bubble": {
     "state": "reading",

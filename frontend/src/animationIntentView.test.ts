@@ -50,20 +50,42 @@ describe("animation intent view", () => {
       animations: {
         "workflow.done": {
           animation: "workflow.done",
-          loop: false
+          loop: false,
+          source: {
+            kind: "png-sequence",
+            frames: ["asset://localhost/done/000.png"],
+            fps: 8
+          }
         },
         "physical.falling": {
           animation: "physical.falling",
           loop: false,
-          procedural: ["drop"]
+          procedural: ["drop"],
+          source: {
+            kind: "png-sequence",
+            frames: ["asset://localhost/falling/000.png"],
+            fps: 8
+          }
         },
         "legacy.idle": {
           animation: "legacy.idle",
-          loop: true
+          loop: true,
+          source: {
+            kind: "petdex-row",
+            row: "idle",
+            frameCount: 6,
+            fps: 6
+          }
         },
         "legacy.review": {
           animation: "legacy.review",
-          loop: true
+          loop: true,
+          source: {
+            kind: "petdex-row",
+            row: "review",
+            frameCount: 6,
+            fps: 6
+          }
         }
       },
       fallbacks: {},

@@ -3,10 +3,37 @@ import {
   type ProceduralEffect
 } from "@ai-partner/contracts";
 
+export type PetdexAnimationRow =
+  | "idle"
+  | "running-right"
+  | "running-left"
+  | "waving"
+  | "jumping"
+  | "failed"
+  | "waiting"
+  | "running"
+  | "review";
+
+export interface PetdexRowFrameSource {
+  kind: "petdex-row";
+  row: PetdexAnimationRow;
+  frameCount: number;
+  fps: number;
+}
+
+export interface PngSequenceFrameSource {
+  kind: "png-sequence";
+  frames: string[];
+  fps: number;
+}
+
+export type AnimationFrameSource = PetdexRowFrameSource | PngSequenceFrameSource;
+
 export interface AnimationTimeline {
   animation: AnimationRef;
   loop: boolean;
   procedural?: ProceduralEffect[];
+  source?: AnimationFrameSource;
 }
 
 export interface AssetRuntimeLimits {
@@ -44,6 +71,36 @@ export const petdexLegacyAnimations = [
   "legacy.review"
 ] as const satisfies readonly AnimationRef[];
 
+export const petdexLegacyRows = [
+  "idle",
+  "running-right",
+  "running-left",
+  "waving",
+  "jumping",
+  "failed",
+  "waiting",
+  "running",
+  "review"
+] as const satisfies readonly PetdexAnimationRow[];
+
+export const petdexLegacyRowByAnimation = Object.fromEntries(
+  petdexLegacyAnimations.map((animation, index) => [animation, petdexLegacyRows[index]])
+) as Record<(typeof petdexLegacyAnimations)[number], PetdexAnimationRow>;
+
+export const petdexLegacyFrameCounts: Record<PetdexAnimationRow, number> = {
+  idle: 6,
+  "running-right": 8,
+  "running-left": 8,
+  waving: 4,
+  jumping: 5,
+  failed: 8,
+  waiting: 6,
+  running: 6,
+  review: 6
+};
+
+export const DEFAULT_PETDEX_FPS = 6;
+
 export const defaultFallbacks: Record<AnimationRef, AnimationRef[]> = {
   "workflow.idle": ["legacy.idle"],
   "workflow.running": ["legacy.running", "legacy.idle"],
@@ -66,7 +123,13 @@ export const defaultPetdexCapabilities: PartnerCapabilities = {
       {
         animation,
         loop: animation !== "legacy.waving" && animation !== "legacy.jumping",
-        procedural: []
+        procedural: [],
+        source: {
+          kind: "petdex-row",
+          row: petdexLegacyRowByAnimation[animation],
+          frameCount: petdexLegacyFrameCounts[petdexLegacyRowByAnimation[animation]],
+          fps: DEFAULT_PETDEX_FPS
+        }
       }
     ])
   ),

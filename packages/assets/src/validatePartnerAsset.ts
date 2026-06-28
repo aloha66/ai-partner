@@ -56,6 +56,7 @@ export interface AssetValidationErrorItem {
   code: AssetValidationErrorCode;
   message: string;
   path?: string;
+  fatal?: boolean;
 }
 
 export interface AssetValidationResult {
@@ -63,11 +64,18 @@ export interface AssetValidationResult {
   root: string;
   petJson?: PetJson;
   manifest?: AnimationsManifest;
+  validAnimationSequences?: ValidatedAnimationSequence[];
   spritesheet?: {
     path: string;
     metadata: ImageMetadata;
   };
   errors: AssetValidationErrorItem[];
+}
+
+export interface ValidatedAnimationSequence {
+  animation: AnimationRef;
+  sourcePath: string;
+  frames: string[];
 }
 
 export interface ValidatePartnerAssetOptions {
@@ -126,15 +134,16 @@ export async function validatePartnerAsset(
   const manifest = await readAnimationsManifest(rootPath, errors);
   if (manifest) {
     result.manifest = manifest;
-    await validateAnimationsManifest(
+    const validSequences = await validateAnimationsManifest(
       rootPath,
       manifest,
       options.readImageMetadata ?? readImageMetadata,
       errors
     );
+    result.validAnimationSequences = validSequences;
   }
 
-  result.ok = errors.length === 0;
+  result.ok = errors.every((error) => error.fatal === false);
   return result;
 }
 
@@ -416,7 +425,8 @@ async function validateAnimationsManifest(
   manifest: AnimationsManifest,
   reader: ImageMetadataReader,
   errors: AssetValidationErrorItem[]
-): Promise<void> {
+): Promise<ValidatedAnimationSequence[]> {
+  const validSequences: ValidatedAnimationSequence[] = [];
   if (manifest.baseAsset?.cellSize) {
     const { width, height } = manifest.baseAsset.cellSize;
     if (width !== PETDEX_CELL_WIDTH || height !== PETDEX_CELL_HEIGHT) {
@@ -441,11 +451,12 @@ async function validateAnimationsManifest(
       entry.source,
       `animation ${animationRef}`,
       errors,
-      { expectDirectory: true }
+      { expectDirectory: true, fatal: false }
     );
     if (!sourcePath) {
       continue;
     }
+    let entryHasErrors = false;
     if (entry.fps !== undefined) {
       if (
         !Number.isInteger(entry.fps) ||
@@ -455,12 +466,16 @@ async function validateAnimationsManifest(
         errors.push({
           code: "runtime_budget",
           message: `fps must be ${defaultRuntimeLimits.minFps}-${defaultRuntimeLimits.maxFps}`,
-          path: sourcePath
+          path: sourcePath,
+          fatal: false
         });
+        entryHasErrors = true;
       }
     }
-    const frameNames = (await readdir(sourcePath)).filter((name) => /\.png$/i.test(name));
-    await validateFramePaths(root, sourcePath, frameNames, reader, errors);
+    const frameNames = (await readdir(sourcePath))
+      .filter((name) => /\.png$/i.test(name))
+      .sort((left, right) => left.localeCompare(right, "en"));
+    entryHasErrors = (await validateFramePaths(root, sourcePath, frameNames, reader, errors)) || entryHasErrors;
     if (
       frameNames.length === 0 ||
       frameNames.length > defaultRuntimeLimits.maxFramesPerAnimation
@@ -468,10 +483,21 @@ async function validateAnimationsManifest(
       errors.push({
         code: "runtime_budget",
         message: `animation must contain 1-${defaultRuntimeLimits.maxFramesPerAnimation} PNG frames`,
-        path: sourcePath
+        path: sourcePath,
+        fatal: false
+      });
+      entryHasErrors = true;
+    }
+    if (!entryHasErrors) {
+      validSequences.push({
+        animation: animationRef as AnimationRef,
+        sourcePath,
+        frames: frameNames.map((frameName) => join(sourcePath, frameName))
       });
     }
   }
+
+  return validSequences;
 }
 
 async function validateFramePaths(
@@ -480,7 +506,8 @@ async function validateFramePaths(
   frameNames: string[],
   reader: ImageMetadataReader,
   errors: AssetValidationErrorItem[]
-): Promise<void> {
+): Promise<boolean> {
+  let hasErrors = false;
   for (const frameName of frameNames) {
     const framePath = join(sourcePath, frameName);
     try {
@@ -489,16 +516,20 @@ async function validateFramePaths(
         errors.push({
           code: "path_symlink",
           message: "extension frame path cannot be a symlink",
-          path: framePath
+          path: framePath,
+          fatal: false
         });
+        hasErrors = true;
         continue;
       }
       if (!frameStat.isFile()) {
         errors.push({
           code: "runtime_budget",
           message: "extension frame path must be a PNG file",
-          path: framePath
+          path: framePath,
+          fatal: false
         });
+        hasErrors = true;
         continue;
       }
       const frameRealPath = await realpath(framePath);
@@ -506,8 +537,10 @@ async function validateFramePaths(
         errors.push({
           code: "path_escape",
           message: "extension frame path resolves outside companion root",
-          path: framePath
+          path: framePath,
+          fatal: false
         });
+        hasErrors = true;
         continue;
       }
       try {
@@ -519,24 +552,31 @@ async function validateFramePaths(
           errors.push({
             code: "runtime_budget",
             message: `extension frame must be ${defaultRuntimeLimits.frameWidth}x${defaultRuntimeLimits.frameHeight}`,
-            path: framePath
+            path: framePath,
+            fatal: false
           });
+          hasErrors = true;
         }
       } catch (error) {
         errors.push({
           code: "runtime_budget",
           message: String(error),
-          path: framePath
+          path: framePath,
+          fatal: false
         });
+        hasErrors = true;
       }
     } catch {
       errors.push({
         code: "path_escape",
         message: "extension frame path is missing",
-        path: framePath
+        path: framePath,
+        fatal: false
       });
+      hasErrors = true;
     }
   }
+  return hasErrors;
 }
 
 async function resolveRelativeAssetPath(
@@ -544,13 +584,15 @@ async function resolveRelativeAssetPath(
   candidate: string,
   label: string,
   errors: AssetValidationErrorItem[],
-  options: { expectDirectory?: boolean } = {}
+  options: { expectDirectory?: boolean; fatal?: boolean } = {}
 ): Promise<string | undefined> {
+  const fatal = options.fatal ?? true;
   if (isAbsolute(candidate)) {
     errors.push({
       code: "path_absolute",
       message: `${label} path must be relative`,
-      path: candidate
+      path: candidate,
+      fatal
     });
     return undefined;
   }
@@ -563,7 +605,8 @@ async function resolveRelativeAssetPath(
     errors.push({
       code: "path_escape",
       message: `${label} path cannot escape companion root`,
-      path: candidate
+      path: candidate,
+      fatal
     });
     return undefined;
   }
@@ -573,7 +616,8 @@ async function resolveRelativeAssetPath(
     errors.push({
       code: "path_escape",
       message: `${label} path resolves outside companion root`,
-      path: candidate
+      path: candidate,
+      fatal
     });
     return undefined;
   }
@@ -584,7 +628,8 @@ async function resolveRelativeAssetPath(
       errors.push({
         code: "path_symlink",
         message: `${label} path cannot be a symlink`,
-        path: candidate
+        path: candidate,
+        fatal
       });
       return undefined;
     }
@@ -592,7 +637,8 @@ async function resolveRelativeAssetPath(
       errors.push({
         code: "path_escape",
         message: `${label} path must be a directory`,
-        path: candidate
+        path: candidate,
+        fatal
       });
       return undefined;
     }
@@ -600,7 +646,8 @@ async function resolveRelativeAssetPath(
       errors.push({
         code: "spritesheet_missing",
         message: `${label} path must be a file`,
-        path: candidate
+        path: candidate,
+        fatal
       });
       return undefined;
     }
@@ -609,7 +656,8 @@ async function resolveRelativeAssetPath(
       errors.push({
         code: "path_escape",
         message: `${label} symlink target escapes companion root`,
-        path: candidate
+        path: candidate,
+        fatal
       });
       return undefined;
     }
@@ -618,7 +666,8 @@ async function resolveRelativeAssetPath(
     errors.push({
       code: options.expectDirectory ? "path_escape" : "spritesheet_missing",
       message: `${label} path is missing`,
-      path: candidate
+      path: candidate,
+      fatal
     });
     return undefined;
   }
@@ -669,16 +718,28 @@ async function readJson(
 function capabilitiesFromValidation(result: AssetValidationResult): PartnerCapabilities {
   const animations = { ...defaultPetdexCapabilities.animations };
   const fallbacks = { ...defaultPetdexCapabilities.fallbacks };
+  const sequenceByAnimation = new Map(
+    (result.validAnimationSequences ?? []).map((sequence) => [sequence.animation, sequence])
+  );
   for (const [animationRef, entry] of Object.entries(result.manifest?.animations ?? {})) {
     const animation = animationRef as AnimationRef;
-    animations[animation] = {
-      animation,
-      loop: entry.loop ?? defaultLoopFor(animation),
-      procedural: []
-    };
     if (entry.fallbacks && entry.fallbacks.length > 0) {
       fallbacks[animation] = entry.fallbacks;
     }
+    const sequence = sequenceByAnimation.get(animation);
+    if (!sequence) {
+      continue;
+    }
+    animations[animation] = {
+      animation,
+      loop: entry.loop ?? defaultLoopFor(animation),
+      procedural: [],
+      source: {
+        kind: "png-sequence",
+        frames: sequence.frames,
+        fps: entry.fps ?? defaultFpsFor(animation)
+      }
+    };
   }
 
   return {
@@ -691,6 +752,10 @@ function capabilitiesFromValidation(result: AssetValidationResult): PartnerCapab
 
 function defaultLoopFor(animation: string): boolean {
   return animation !== "workflow.done" && animation !== "physical.falling";
+}
+
+function defaultFpsFor(_animation: string): number {
+  return 8;
 }
 
 function isPathInside(root: string, target: string): boolean {

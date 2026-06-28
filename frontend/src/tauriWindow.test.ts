@@ -290,6 +290,135 @@ describe("Tauri state bridge", () => {
     );
   });
 
+  it("converts validated PNG sequence frame paths to runtime asset URLs", async () => {
+    const catalog = {
+      companions: [
+        {
+          id: "petdex:custom",
+          partnerId: "custom",
+          displayName: "Custom",
+          spritesheetPath: "/Users/test/.petdex/pets/custom/spritesheet.webp",
+          capabilities: {
+            partnerId: "custom",
+            animations: {
+              "workflow.done": {
+                animation: "workflow.done",
+                loop: false,
+                procedural: [],
+                source: {
+                  kind: "png-sequence",
+                  frames: [
+                    "/Users/test/.petdex/pets/custom/extras/workflow-done/000.png",
+                    "asset://localhost/already-converted.png",
+                    "https://example.test/remote-frame.png"
+                  ],
+                  fps: 8
+                }
+              },
+              "legacy.idle": {
+                animation: "legacy.idle",
+                loop: true,
+                procedural: [],
+                source: {
+                  kind: "petdex-row",
+                  row: "idle",
+                  frameCount: 6,
+                  fps: 6
+                }
+              }
+            },
+            fallbacks: {
+              "workflow.done": ["legacy.waving", "legacy.idle"]
+            },
+            runtimeLimits: {
+              frameWidth: 192,
+              frameHeight: 208,
+              maxFramesPerAnimation: 32,
+              minFps: 1,
+              maxFps: 24
+            }
+          },
+          valid: true,
+          status: "valid",
+          errors: [],
+          source: "petdex"
+        }
+      ],
+      selectedCompanionId: "petdex:custom",
+      selectedCompanion: {
+        id: "petdex:custom",
+        partnerId: "custom",
+        displayName: "Custom",
+        spritesheetPath: "/Users/test/.petdex/pets/custom/spritesheet.webp",
+        capabilities: {
+          partnerId: "custom",
+          animations: {
+            "workflow.done": {
+              animation: "workflow.done",
+              loop: false,
+              procedural: [],
+              source: {
+                kind: "png-sequence",
+                frames: [
+                  "/Users/test/.petdex/pets/custom/extras/workflow-done/000.png",
+                  "asset://localhost/already-converted.png",
+                  "https://example.test/remote-frame.png"
+                ],
+                fps: 8
+              }
+            }
+          },
+          fallbacks: {
+            "workflow.done": ["legacy.waving", "legacy.idle"]
+          },
+          runtimeLimits: {
+            frameWidth: 192,
+            frameHeight: 208,
+            maxFramesPerAnimation: 32,
+            minFps: 1,
+            maxFps: 24
+          }
+        },
+        valid: true,
+        status: "valid",
+        errors: [],
+        source: "petdex"
+      },
+      fallbackUsed: false,
+      status: "selected"
+    };
+    tauriMocks.invoke.mockResolvedValueOnce(catalog);
+    const { listLocalCompanions } = await import("./tauriWindow");
+
+    await expect(listLocalCompanions()).resolves.toMatchObject({
+      selectedCompanion: {
+        capabilities: {
+          animations: {
+            "workflow.done": {
+              source: {
+                kind: "png-sequence",
+                frames: [
+                  "asset://localhost/%2FUsers%2Ftest%2F.petdex%2Fpets%2Fcustom%2Fextras%2Fworkflow-done%2F000.png",
+                  "asset://localhost/already-converted.png",
+                  "asset://localhost/https%3A%2F%2Fexample.test%2Fremote-frame.png"
+                ]
+              }
+            }
+          }
+        }
+      }
+    });
+    expect(tauriMocks.convertFileSrc).toHaveBeenCalledWith(
+      "/Users/test/.petdex/pets/custom/extras/workflow-done/000.png"
+    );
+    expect(tauriMocks.convertFileSrc).not.toHaveBeenCalledWith(
+      "asset://localhost/already-converted.png"
+    );
+    expect(tauriMocks.convertFileSrc).toHaveBeenCalledWith(
+      "https://example.test/remote-frame.png"
+    );
+  });
+
   it("sets a selected companion through Rust", async () => {
     tauriMocks.invoke.mockResolvedValueOnce({
       companions: [],

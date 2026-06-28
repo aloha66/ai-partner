@@ -84,12 +84,22 @@ function snapshot(
 }
 
 function intentFor(animation: AnimationRef, loop = true): AnimationIntent {
+  const row = petdexRows.find((candidate) => legacyAnimationByPetdexRow[candidate] === animation);
+  if (row === undefined) {
+    throw new Error(`No Petdex row for ${animation}`);
+  }
   return {
     schemaVersion: ANIMATION_INTENT_SCHEMA_VERSION,
     body: {
       animation,
       procedural: [],
-      loop
+      loop,
+      source: {
+        kind: "petdex-row",
+        row,
+        frameCount: petdexFrameCounts[row],
+        fps: 6
+      }
     },
     bubble: null,
     queued: []
@@ -287,6 +297,10 @@ describe("Full Petdex renderer compatibility smoke", () => {
         );
 
         expect(columnIndex).toBeLessThan(frameCount);
+        expect(model.sourceKind).toBe("petdex-row");
+        if (model.sourceKind !== "petdex-row") {
+          throw new Error("Petdex smoke should render atlas rows");
+        }
         expect(model.row).toBe(row);
         expect(model.frame.columnIndex).toBe(columnIndex);
         expect(model.frame.row).toBe(row);
@@ -307,6 +321,10 @@ describe("Full Petdex renderer compatibility smoke", () => {
         petdexFrameCounts[row] - 1,
         "data:image/png;base64,real-atlas"
       );
+      expect(model.sourceKind).toBe("petdex-row");
+      if (model.sourceKind !== "petdex-row") {
+        throw new Error("Petdex smoke should render atlas rows");
+      }
       const cssWidth = Number(model.style.width);
       const cssHeight = Number(model.style.height);
       const atlasWidth = Number(model.atlasStyle.width);
@@ -348,6 +366,10 @@ describe("Full Petdex renderer compatibility smoke", () => {
       const intent = resolvePartnerIntent(snapshot(workflowState), "normal");
       const model = spriteRenderModelForIntent(intent, petdexFrameCounts[expectedRow] - 1, "atlas");
 
+      expect(model.sourceKind).toBe("petdex-row");
+      if (model.sourceKind !== "petdex-row") {
+        throw new Error("Default workflow fallback should render Petdex rows");
+      }
       expect(model.row).toBe(expectedRow);
       expect(model.frame.columnIndex).toBe(petdexFrameCounts[expectedRow] - 1);
     }
@@ -376,6 +398,10 @@ describe("Full Petdex renderer compatibility smoke", () => {
         );
         const model = spriteRenderModelForIntent(intent, 0, "atlas");
 
+        expect(model.sourceKind).toBe("petdex-row");
+        if (model.sourceKind !== "petdex-row") {
+          throw new Error("Physical fallback should render Petdex rows");
+        }
         expect(model.row).toBe(
           physicalState === "struggling" ? "running-right" : expectedRow
         );

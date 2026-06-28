@@ -1,3 +1,11 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import {
+  mkdir,
+  writeFile
+} from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { stdin } from "node:process";
 import type { Readable } from "node:stream";
 import type {
@@ -44,6 +52,7 @@ export interface SendCodexHookEventOptions {
   strict?: boolean;
   timestamp?: Date;
   cwd?: string;
+  cacheDir?: string;
   discover?: (options: DiscoverRuntimeOptions) => Promise<RuntimeDescriptor>;
   send?: (
     descriptor: RuntimeDescriptor,
@@ -53,6 +62,7 @@ export interface SendCodexHookEventOptions {
 }
 
 const source = "codex-hook" as const satisfies WorkflowSource;
+const defaultHookRunCacheDir = join(tmpdir(), "ai-partner-codex-hook-runs");
 
 export async function sendCodexHookEvent(
   options: SendCodexHookEventOptions = {}
@@ -62,7 +72,8 @@ export async function sendCodexHookEvent(
     const signal = createCodexHookSignal(input, {
       eventName: options.eventName,
       timestamp: options.timestamp,
-      cwd: options.cwd ?? process.cwd()
+      cwd: options.cwd ?? process.cwd(),
+      cacheDir: options.cacheDir
     });
 
     if (signal === undefined) {
@@ -86,6 +97,7 @@ export async function sendCodexHookEvent(
       sendOptions.timeoutMs = options.postTimeoutMs;
     }
     await (options.send ?? sendWorkflowEvent)(descriptor, event, sendOptions);
+    await rememberCodexHookRun(input, signal, options.cwd ?? process.cwd(), options.cacheDir).catch(debugLog);
     return event;
   } catch (error) {
     if (options.strict) {
@@ -98,7 +110,7 @@ export async function sendCodexHookEvent(
 
 export function createCodexHookSignal(
   input: unknown,
-  options: { eventName?: string; timestamp?: Date; cwd?: string } = {}
+  options: { eventName?: string; timestamp?: Date; cwd?: string; cacheDir?: string } = {}
 ): CodexHookSignal | undefined {
   const record = asRecord(input);
   const eventName = normalizeCodexHookEventName(
@@ -115,7 +127,7 @@ export function createCodexHookSignal(
   return {
     eventName,
     state: stateForCodexHookEvent(eventName, record),
-    runId: runIdForCodexHook(record, options.timestamp),
+    runId: runIdForCodexHook(record, eventName, options.timestamp, options.cwd, options.cacheDir),
     message: messageForCodexHookEvent(eventName, record),
     contextPath: contextPathForCodexHook(record, options.cwd)
   };
@@ -219,10 +231,30 @@ function hookPayloadLooksFailed(input: Record<string, unknown>): boolean {
   return Boolean(input.error);
 }
 
-function runIdForCodexHook(input: Record<string, unknown>, timestamp = new Date()): string {
-  const candidate =
+function runIdForCodexHook(
+  input: Record<string, unknown>,
+  eventName: CodexHookEventName,
+  timestamp = new Date(),
+  cwd?: string,
+  cacheDir?: string
+): string {
+  const explicitTurn =
+    readString(input, "run_id") ??
+    readString(input, "runId") ??
     readString(input, "turn_id") ??
-    readString(input, "turnId") ??
+    readString(input, "turnId");
+  if (explicitTurn !== undefined) {
+    return `run_codex_hook_${sanitizeIdPart(explicitTurn)}`;
+  }
+
+  if (eventName === "Stop") {
+    const remembered = readRememberedCodexHookRunSync(input, cwd, cacheDir);
+    if (remembered !== undefined) {
+      return remembered;
+    }
+  }
+
+  const candidate =
     readString(input, "session_id") ??
     readString(input, "sessionId") ??
     timestamp.toISOString();
@@ -264,6 +296,80 @@ function readString(record: Record<string, unknown>, key: string): string | unde
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+async function rememberCodexHookRun(
+  input: unknown,
+  signal: CodexHookSignal,
+  cwd: string,
+  cacheDir?: string
+): Promise<void> {
+  if (!shouldRememberRun(signal.eventName)) {
+    return;
+  }
+  const cachePath = cachePathForHookInput(asRecord(input), cwd, cacheDir);
+  if (cachePath === undefined) {
+    return;
+  }
+  await mkdir(cacheRoot(cacheDir), { recursive: true });
+  await writeFile(
+    cachePath,
+    JSON.stringify({
+      runId: signal.runId,
+      updatedAt: new Date().toISOString()
+    }),
+    "utf8"
+  );
+}
+
+function shouldRememberRun(eventName: CodexHookEventName): boolean {
+  return eventName !== "Stop";
+}
+
+function readRememberedCodexHookRunSync(
+  input: Record<string, unknown>,
+  cwd: string | undefined,
+  cacheDir?: string
+): string | undefined {
+  const cachePath = cachePathForHookInput(input, cwd, cacheDir);
+  if (cachePath === undefined) {
+    return undefined;
+  }
+  try {
+    const payload = JSON.parse(readFileSync(cachePath, "utf8")) as unknown;
+    const record = asRecord(payload);
+    if (Object.keys(record).length === 0) {
+      return undefined;
+    }
+    return readString(record, "runId");
+  } catch {
+    return undefined;
+  }
+}
+
+function cachePathForHookInput(
+  input: Record<string, unknown>,
+  cwd: string | undefined,
+  cacheDir?: string
+): string | undefined {
+  const session =
+    readString(input, "session_id") ??
+    readString(input, "sessionId") ??
+    readString(input, "conversation_id") ??
+    readString(input, "conversationId");
+  if (session === undefined) {
+    return undefined;
+  }
+  const context = contextPathForCodexHook(input, cwd) ?? "";
+  const key = createHash("sha256")
+    .update(`${session}\0${context}`)
+    .digest("hex")
+    .slice(0, 40);
+  return join(cacheRoot(cacheDir), `${key}.json`);
+}
+
+function cacheRoot(cacheDir: string | undefined): string {
+  return cacheDir ?? defaultHookRunCacheDir;
 }
 
 function debugLog(error: unknown): void {

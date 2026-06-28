@@ -619,6 +619,56 @@ describe("Codex hook sender", () => {
       });
   });
 
+  it("reuses the active turn run_id for Stop hooks that only include a session id", async () => {
+    const descriptor = runtimeDescriptor({ port: 43172 });
+    const sentEvents: Array<{ run_id: string; workflow_state: string }> = [];
+    const cacheDir = await mkdtemp(join(tmpdir(), "ai-partner-hook-test-"));
+    const send = async (
+      _descriptor: RuntimeDescriptor,
+      event: { run_id: string; workflow_state: string }
+    ) => {
+      sentEvents.push({
+        run_id: event.run_id,
+        workflow_state: event.workflow_state
+      });
+      return { status: 202, body: "{}" };
+    };
+
+    await sendCodexHookEvent({
+      input: {
+        hook_event_name: "PreToolUse",
+        tool_name: "Read",
+        turn_id: "turn_abc",
+        session_id: "session_abc"
+      },
+      cwd: "/Users/aloha66/code/ai-partner",
+      cacheDir,
+      discover: async () => descriptor,
+      send
+    });
+    await sendCodexHookEvent({
+      input: {
+        hook_event_name: "Stop",
+        session_id: "session_abc"
+      },
+      cwd: "/Users/aloha66/code/ai-partner",
+      cacheDir,
+      discover: async () => descriptor,
+      send
+    });
+
+    expect(sentEvents).toEqual([
+      {
+        run_id: "run_codex_hook_turn_abc",
+        workflow_state: "reading"
+      },
+      {
+        run_id: "run_codex_hook_turn_abc",
+        workflow_state: "done"
+      }
+    ]);
+  });
+
   it("uses Codex hook cwd metadata before falling back to the sender cwd", () => {
     expect(
       createCodexHookSignal(

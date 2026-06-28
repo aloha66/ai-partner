@@ -247,6 +247,20 @@ button {
   transform-origin: top left;
 }
 
+.sprite-sequence-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+
+.sprite-frame.is-missing-source {
+  visibility: hidden;
+}
+
 .sprite-frame.effect-shake {
   animation: sprite-shake 220ms linear infinite;
 }

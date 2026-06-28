@@ -70,7 +70,7 @@
     "bodyIntent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["animation", "procedural", "loop"],
+      "required": ["animation", "procedural", "loop", "source"],
       "properties": {
         "animation": {
           "$ref": "#/$defs/animationRef"
@@ -85,8 +85,86 @@
         },
         "loop": {
           "type": "boolean"
+        },
+        "source": {
+          "$ref": "#/$defs/frameSource"
         }
       }
+    },
+    "frameSource": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "row", "frameCount", "fps"],
+          "properties": {
+            "kind": {
+              "const": "petdex-row"
+            },
+            "row": {
+              "type": "string",
+              "enum": [
+                "idle",
+                "running-right",
+                "running-left",
+                "waving",
+                "jumping",
+                "failed",
+                "waiting",
+                "running",
+                "review"
+              ]
+            },
+            "frameCount": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            },
+            "fps": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 24
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "frames", "fps"],
+          "properties": {
+            "kind": {
+              "const": "png-sequence"
+            },
+            "frames": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 32,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "fps": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 24
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "reason"],
+          "properties": {
+            "kind": {
+              "const": "missing"
+            },
+            "reason": {
+              "const": "animation-unavailable"
+            }
+          }
+        }
+      ]
     }
   }
 }
