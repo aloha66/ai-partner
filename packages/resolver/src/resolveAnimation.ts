@@ -1,5 +1,6 @@
 import {
   ANIMATION_INTENT_SCHEMA_VERSION,
+  type AnimationFrameSource,
   type AnimationIntent,
   type AnimationRef,
   type BodyAnimationIntent,
@@ -139,7 +140,8 @@ function bodyIntentFor(
   return {
     animation,
     procedural: [...procedural],
-    loop: timeline?.loop ?? fallback.fallbackLoop
+    loop: timeline?.loop ?? fallback.fallbackLoop,
+    source: timeline?.source ?? missingFrameSource()
   };
 }
 
@@ -160,7 +162,7 @@ function selectAnimation(
       return fallback;
     }
   }
-  return capabilities.animations["legacy.idle"] ? "legacy.idle" : requested;
+  return requested;
 }
 
 function orderedFallbacks(
@@ -228,4 +230,11 @@ function activeQueuedAnimations(
   now: Date
 ): QueuedAnimationIntent[] {
   return queued.filter((item) => Date.parse(item.expiresAt) > now.getTime());
+}
+
+function missingFrameSource(): AnimationFrameSource {
+  return {
+    kind: "missing",
+    reason: "animation-unavailable"
+  };
 }

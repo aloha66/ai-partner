@@ -13,6 +13,11 @@ const PETDEX_ATLAS_WIDTH: u32 = 1536;
 const PETDEX_ATLAS_HEIGHT: u32 = 1872;
 const PETDEX_CELL_WIDTH: u32 = 192;
 const PETDEX_CELL_HEIGHT: u32 = 208;
+const MAX_FRAMES_PER_ANIMATION: usize = 32;
+const MIN_ANIMATION_FPS: u32 = 1;
+const MAX_ANIMATION_FPS: u32 = 24;
+const DEFAULT_PETDEX_FPS: u32 = 6;
+const DEFAULT_SEQUENCE_FPS: u32 = 8;
 
 #[derive(Clone)]
 pub struct CompanionStore {
@@ -75,6 +80,22 @@ pub struct CompanionTimeline {
     #[serde(rename = "loop")]
     loop_animation: bool,
     procedural: Vec<String>,
+    source: CompanionFrameSource,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum CompanionFrameSource {
+    PetdexRow {
+        row: String,
+        #[serde(rename = "frameCount")]
+        frame_count: u32,
+        fps: u32,
+    },
+    PngSequence {
+        frames: Vec<String>,
+        fps: u32,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -107,6 +128,7 @@ struct AnimationsManifest {
 #[serde(rename_all = "camelCase")]
 struct AnimationManifestEntry {
     source: String,
+    fps: Option<u32>,
     #[serde(rename = "loop")]
     loop_animation: Option<bool>,
     fallbacks: Option<Vec<String>>,
@@ -472,32 +494,102 @@ fn capabilities_for_root(
             errors.push(format!("invalid animation ref: {animation_ref}"));
             continue;
         }
-        if !manifest_source_is_inside_root(root, &entry.source) {
-            errors.push(format!(
-                "animation source escapes companion root: {animation_ref}"
-            ));
-            continue;
-        }
-        if let Some(fallbacks) = entry.fallbacks {
+        if let Some(fallbacks) = &entry.fallbacks {
             if fallbacks.iter().all(|fallback| is_animation_ref(fallback)) {
                 capabilities
                     .fallbacks
-                    .insert(animation_ref.clone(), fallbacks);
+                    .insert(animation_ref.clone(), fallbacks.clone());
             } else {
                 errors.push(format!("animation fallbacks are invalid: {animation_ref}"));
             }
         }
+        let Some(sequence) = validate_animation_sequence(root, &animation_ref, &entry)
+        else {
+            continue;
+        };
         capabilities.animations.insert(
             animation_ref.clone(),
             CompanionTimeline {
                 animation: animation_ref,
                 loop_animation: entry.loop_animation.unwrap_or(true),
                 procedural: Vec::new(),
+                source: CompanionFrameSource::PngSequence {
+                    frames: sequence.frames,
+                    fps: sequence.fps,
+                },
             },
         );
     }
 
     capabilities
+}
+
+struct ValidatedAnimationSequence {
+    frames: Vec<String>,
+    fps: u32,
+}
+
+fn validate_animation_sequence(
+    root: &Path,
+    _animation_ref: &str,
+    entry: &AnimationManifestEntry,
+) -> Option<ValidatedAnimationSequence> {
+    let source_path = resolve_animation_source(root, &entry.source).ok()?;
+
+    let fps = entry.fps.unwrap_or(DEFAULT_SEQUENCE_FPS);
+    if !(MIN_ANIMATION_FPS..=MAX_ANIMATION_FPS).contains(&fps) {
+        return None;
+    }
+
+    let Ok(entries) = fs::read_dir(&source_path) else {
+        return None;
+    };
+    let mut frame_paths = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.extension()
+                .and_then(|value| value.to_str())
+                .map(|extension| extension.eq_ignore_ascii_case("png"))
+                .unwrap_or(false)
+        })
+        .collect::<Vec<_>>();
+    frame_paths.sort_by(|left, right| left.file_name().cmp(&right.file_name()));
+
+    if frame_paths.is_empty() || frame_paths.len() > MAX_FRAMES_PER_ANIMATION {
+        return None;
+    }
+
+    let root_real = match fs::canonicalize(root) {
+        Ok(root_real) => root_real,
+        Err(_) => return None,
+    };
+    let mut frames = Vec::new();
+    for frame_path in frame_paths {
+        let Ok(meta) = fs::symlink_metadata(&frame_path) else {
+            return None;
+        };
+        if meta.file_type().is_symlink() {
+            return None;
+        }
+        if !meta.is_file() {
+            return None;
+        }
+        let Ok(frame_real) = fs::canonicalize(&frame_path) else {
+            return None;
+        };
+        if !frame_real.starts_with(&root_real) {
+            return None;
+        }
+        match image_dimensions(&frame_real) {
+            Some((PETDEX_CELL_WIDTH, PETDEX_CELL_HEIGHT)) => {}
+            Some((_width, _height)) => return None,
+            None => return None,
+        }
+        frames.push(frame_real.to_string_lossy().into_owned());
+    }
+
+    Some(ValidatedAnimationSequence { frames, fps })
 }
 
 fn is_animation_ref(value: &str) -> bool {
@@ -511,24 +603,33 @@ fn is_animation_ref(value: &str) -> bool {
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
 }
 
-fn manifest_source_is_inside_root(root: &Path, relative_path: &str) -> bool {
+fn resolve_animation_source(root: &Path, relative_path: &str) -> Result<PathBuf, String> {
     let path = Path::new(relative_path);
     if path.is_absolute()
         || path
             .components()
             .any(|component| !matches!(component, Component::Normal(_)))
     {
-        return false;
+        return Err("animation source escapes companion root".to_string());
     }
 
     let candidate = root.join(path);
-    let Ok(root_real) = fs::canonicalize(root) else {
-        return false;
-    };
-    let Ok(candidate_real) = fs::canonicalize(candidate) else {
-        return false;
-    };
-    candidate_real.starts_with(root_real)
+    let meta = fs::symlink_metadata(&candidate)
+        .map_err(|_| "animation source is missing".to_string())?;
+    if meta.file_type().is_symlink() {
+        return Err("animation source cannot be a symlink".to_string());
+    }
+    if !meta.is_dir() {
+        return Err("animation source must be a directory".to_string());
+    }
+    let root_real = fs::canonicalize(root)
+        .map_err(|_| "asset root is unreadable".to_string())?;
+    let candidate_real = fs::canonicalize(candidate)
+        .map_err(|_| "animation source is unreadable".to_string())?;
+    if !candidate_real.starts_with(root_real) {
+        return Err("animation source resolves outside companion root".to_string());
+    }
+    Ok(candidate_real)
 }
 
 fn resolve_spritesheet(
@@ -717,16 +818,16 @@ fn default_companion() -> LocalCompanion {
 
 fn default_capabilities_for(partner_id: &str) -> CompanionCapabilities {
     let mut animations = BTreeMap::new();
-    for animation in [
-        "legacy.idle",
-        "legacy.running-right",
-        "legacy.running-left",
-        "legacy.waving",
-        "legacy.jumping",
-        "legacy.failed",
-        "legacy.waiting",
-        "legacy.running",
-        "legacy.review",
+    for (animation, row, frame_count) in [
+        ("legacy.idle", "idle", 6),
+        ("legacy.running-right", "running-right", 8),
+        ("legacy.running-left", "running-left", 8),
+        ("legacy.waving", "waving", 4),
+        ("legacy.jumping", "jumping", 5),
+        ("legacy.failed", "failed", 8),
+        ("legacy.waiting", "waiting", 6),
+        ("legacy.running", "running", 6),
+        ("legacy.review", "review", 6),
     ] {
         animations.insert(
             animation.to_string(),
@@ -734,6 +835,11 @@ fn default_capabilities_for(partner_id: &str) -> CompanionCapabilities {
                 animation: animation.to_string(),
                 loop_animation: animation != "legacy.waving" && animation != "legacy.jumping",
                 procedural: Vec::new(),
+                source: CompanionFrameSource::PetdexRow {
+                    row: row.to_string(),
+                    frame_count,
+                    fps: DEFAULT_PETDEX_FPS,
+                },
             },
         );
     }
@@ -745,9 +851,9 @@ fn default_capabilities_for(partner_id: &str) -> CompanionCapabilities {
         runtime_limits: CompanionRuntimeLimits {
             frame_width: PETDEX_CELL_WIDTH,
             frame_height: PETDEX_CELL_HEIGHT,
-            max_frames_per_animation: 32,
-            min_fps: 1,
-            max_fps: 24,
+            max_frames_per_animation: MAX_FRAMES_PER_ANIMATION as u32,
+            min_fps: MIN_ANIMATION_FPS,
+            max_fps: MAX_ANIMATION_FPS,
         },
     }
 }
@@ -861,6 +967,20 @@ mod tests {
                 && companion.partner_id == "artoria"
                 && companion.valid));
         assert_eq!(catalog.selected_companion_id, DEFAULT_COMPANION_ID);
+        let _ = fs::remove_dir_all(temp);
+    }
+
+    #[test]
+    fn catalog_serializes_petdex_row_sources_for_frontend_contract() {
+        let temp = temp_dir("catalog-frame-source");
+        let catalog = CompanionStore::new(temp.join("home"), temp.join("config")).catalog();
+
+        let payload = serde_json::to_value(&catalog).expect("catalog should serialize");
+        let source = &payload["selectedCompanion"]["capabilities"]["animations"]["legacy.idle"]["source"];
+
+        assert_eq!(source["kind"], "petdex-row");
+        assert_eq!(source["frameCount"], 6);
+        assert!(source.get("frame_count").is_none());
         let _ = fs::remove_dir_all(temp);
     }
 
@@ -1168,12 +1288,23 @@ mod tests {
         let animation_dir = root.join("animations").join("wave");
         fs::create_dir_all(&animation_dir).expect("animation dir write");
         fs::write(
+            animation_dir.join("001.png"),
+            fake_png_header(PETDEX_CELL_WIDTH, PETDEX_CELL_HEIGHT),
+        )
+        .expect("second frame write");
+        fs::write(
+            animation_dir.join("000.png"),
+            fake_png_header(PETDEX_CELL_WIDTH, PETDEX_CELL_HEIGHT),
+        )
+        .expect("first frame write");
+        fs::write(
             root.join("ai-partner.animations.json"),
             serde_json::json!({
                 "schemaVersion": "ai-partner.animations.v1",
                 "animations": {
                     "workflow.done": {
                         "source": "animations/wave",
+                        "fps": 8,
                         "loop": false,
                         "fallbacks": ["legacy.waving"]
                     }
@@ -1199,9 +1330,69 @@ mod tests {
                 .map(|timeline| timeline.loop_animation),
             Some(false)
         );
+        let timeline = custom
+            .capabilities
+            .animations
+            .get("workflow.done")
+            .expect("workflow.done sequence should be registered");
+        assert_eq!(
+            timeline.source,
+            CompanionFrameSource::PngSequence {
+                frames: vec![
+                    fs::canonicalize(animation_dir.join("000.png"))
+                        .expect("first frame real path")
+                        .to_string_lossy()
+                        .into_owned(),
+                    fs::canonicalize(animation_dir.join("001.png"))
+                        .expect("second frame real path")
+                        .to_string_lossy()
+                        .into_owned(),
+                ],
+                fps: 8
+            }
+        );
         assert_eq!(
             custom.capabilities.fallbacks.get("workflow.done"),
             Some(&vec!["legacy.waving".to_string()])
+        );
+        let _ = fs::remove_dir_all(temp);
+    }
+
+    #[test]
+    fn skips_bad_manifest_sequences_while_preserving_legacy_fallbacks() {
+        let temp = temp_dir("manifest-bad-sequence");
+        let home = temp.join("home");
+        let root = home.join(".petdex").join("pets").join("custom");
+        write_pet(&root, "custom", "Custom", "spritesheet.png", Some("png"));
+        fs::write(
+            root.join("ai-partner.animations.json"),
+            serde_json::json!({
+                "schemaVersion": "ai-partner.animations.v1",
+                "animations": {
+                    "workflow.done": {
+                        "source": "extras/missing",
+                        "fps": 8,
+                        "loop": false,
+                        "fallbacks": ["legacy.waving", "legacy.idle"]
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .expect("manifest write");
+
+        let catalog = CompanionStore::new(home, temp.join("config")).catalog();
+        let custom = catalog
+            .companions
+            .iter()
+            .find(|companion| companion.id == "petdex:custom")
+            .expect("custom companion should be listed");
+
+        assert!(custom.valid);
+        assert!(!custom.capabilities.animations.contains_key("workflow.done"));
+        assert_eq!(
+            custom.capabilities.fallbacks.get("workflow.done"),
+            Some(&vec!["legacy.waving".to_string(), "legacy.idle".to_string()])
         );
         let _ = fs::remove_dir_all(temp);
     }

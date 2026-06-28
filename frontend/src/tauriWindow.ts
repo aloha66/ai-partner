@@ -1,6 +1,10 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { PartnerStateSnapshot, WorkflowEventWire } from "@ai-partner/contracts";
+import type {
+  PartnerStateSnapshot,
+  WorkflowEventWire
+} from "@ai-partner/contracts";
+import type { AnimationTimeline } from "@ai-partner/resolver";
 import type { PartnerCapabilities } from "@ai-partner/resolver";
 import {
   isRegistered,
@@ -167,10 +171,47 @@ function withRuntimeAtlasUrls(catalog: CompanionCatalog): CompanionCatalog {
 function withRuntimeAtlasUrl(companion: LocalCompanion): RuntimeCompanion {
   return {
     ...companion,
+    capabilities: withRuntimeFrameUrls(companion.capabilities),
     runtimeAtlasUrl:
       companion.atlasUrl ??
       (companion.spritesheetPath ? convertFileSrc(companion.spritesheetPath) : undefined)
   };
+}
+
+function withRuntimeFrameUrls(capabilities: PartnerCapabilities): PartnerCapabilities {
+  return {
+    ...capabilities,
+    animations: Object.fromEntries(
+      Object.entries(capabilities.animations).map(([animation, timeline]) => [
+        animation,
+        timeline === undefined ? timeline : withRuntimeFrameSource(timeline)
+      ])
+    )
+  };
+}
+
+function withRuntimeFrameSource(timeline: AnimationTimeline): AnimationTimeline {
+  if (timeline.source?.kind !== "png-sequence") {
+    return timeline;
+  }
+  return {
+    ...timeline,
+    source: {
+      ...timeline.source,
+      frames: timeline.source.frames.map((frame) => convertFrameSource(frame))
+    }
+  };
+}
+
+function convertFrameSource(frame: string): string {
+  if (isTauriAssetUrl(frame)) {
+    return frame;
+  }
+  return convertFileSrc(frame);
+}
+
+function isTauriAssetUrl(value: string): boolean {
+  return value.startsWith("asset:") || value.includes("://asset.localhost/");
 }
 
 export async function moveWindowTo(x: number, y: number): Promise<void> {

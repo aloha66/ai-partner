@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import {
   WORKFLOW_EVENT_SCHEMA_VERSION,
+  type AnimationRef,
   type AnimationIntent,
   type WorkflowAuthorization
 } from "@ai-partner/contracts";
@@ -261,6 +262,7 @@ export function App() {
     window.matchMedia("(prefers-color-scheme: dark)").matches
   );
   const [atlasFailed, setAtlasFailed] = useState(false);
+  const [failedFrameSequenceAnimations, setFailedFrameSequenceAnimations] = useState<AnimationRef[]>([]);
   const [physicalMachine, dispatchPhysical] = useReducer(
     physicalStateMachine,
     initialPhysicalMachineState
@@ -283,16 +285,29 @@ export function App() {
     () => activeCompanionView(atlasFailed ? null : companionCatalog, fallbackAtlasUrl),
     [atlasFailed, companionCatalog, fallbackAtlasUrl]
   );
+  const effectiveCapabilities = useMemo(() => {
+    if (failedFrameSequenceAnimations.length === 0) {
+      return activeCompanion.capabilities;
+    }
+    const animations = { ...activeCompanion.capabilities.animations };
+    for (const animation of failedFrameSequenceAnimations) {
+      delete animations[animation];
+    }
+    return {
+      ...activeCompanion.capabilities,
+      animations
+    };
+  }, [activeCompanion.capabilities, failedFrameSequenceAnimations]);
   const atlasUrl = activeCompanion.atlasUrl;
   const animationIntent = useMemo(
     () => resolvePartnerIntent(partnerState, physicalState, {
       queued: queuedAnimations,
-      capabilities: activeCompanion.capabilities,
+      capabilities: effectiveCapabilities,
       physicalContext: {
         horizontalDirection: dragDirection
       }
     }),
-    [partnerState, physicalState, queuedAnimations, activeCompanion.capabilities, dragDirection]
+    [partnerState, physicalState, queuedAnimations, effectiveCapabilities, dragDirection]
   );
   const stateDisplay = partnerStateDisplay(partnerState);
   const displayedPartnerState = useMemo(() => {
@@ -440,6 +455,7 @@ export function App() {
         setCompanionCatalog(catalog);
         setCompanionStatus(catalog.fallbackUsed ? "fallback" : "ready");
         setAtlasFailed(false);
+        setFailedFrameSequenceAnimations([]);
       })
       .catch(() => {
         if (!disposed) {
@@ -700,6 +716,7 @@ export function App() {
       setQueuedAnimations([]);
       setFrameIndex(0);
       setAtlasFailed(false);
+      setFailedFrameSequenceAnimations([]);
       setCompanionStatus(catalog.fallbackUsed ? "fallback" : "ready");
       setSelectorOpen(false);
     } catch {
@@ -709,9 +726,18 @@ export function App() {
 
   function fallBackFromAtlasError() {
     setAtlasFailed(true);
+    setFailedFrameSequenceAnimations([]);
     setQueuedAnimations([]);
     setFrameIndex(0);
     setCompanionStatus("fallback");
+  }
+
+  function fallBackFromFrameSequenceError(animation: AnimationRef) {
+    setFailedFrameSequenceAnimations((current) =>
+      current.includes(animation) ? current : [...current, animation]
+    );
+    setQueuedAnimations([]);
+    setFrameIndex(0);
   }
 
   async function decideAuthorization(choice: "allow" | "deny") {
@@ -875,6 +901,7 @@ export function App() {
           frameIndex={frameIndex}
           atlasUrl={atlasUrl}
           onAtlasError={fallBackFromAtlasError}
+          onFrameSequenceError={fallBackFromFrameSequenceError}
           dragging={dragging}
           onPointerDown={(event) => void beginManagedDrag(event)}
           onPointerMove={updateManagedDrag}
@@ -885,7 +912,7 @@ export function App() {
 
         <div className="status-pill" role="status" aria-live="polite">
           <span>{stateDisplay.pausedLabel}</span>
-          <strong>{activeCompanion.fallbackUsed || atlasFailed ? "fallback" : stateDisplay.workflowLabel}</strong>
+          <strong>{activeCompanion.fallbackUsed || atlasFailed || failedFrameSequenceAnimations.length > 0 ? "fallback" : stateDisplay.workflowLabel}</strong>
         </div>
       </section>
 

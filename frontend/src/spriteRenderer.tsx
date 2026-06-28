@@ -1,5 +1,6 @@
 import { type CSSProperties, type PointerEventHandler } from "react";
 import {
+  type AnimationFrameSource,
   type AnimationIntent,
   type AnimationRef,
   type ProceduralEffect
@@ -22,45 +23,51 @@ export const SPRITE_RENDER_WIDTH = Math.round(
 export const SPRITE_RENDER_SCALE_X = SPRITE_RENDER_WIDTH / PETDEX_CELL_WIDTH;
 export const SPRITE_RENDER_SCALE_Y = SPRITE_RENDER_HEIGHT / PETDEX_CELL_HEIGHT;
 
-const canonicalPetdexRows = {
-  "workflow.idle": "idle",
-  "workflow.running": "running",
-  "workflow.reading": "review",
-  "workflow.editing": "running",
-  "workflow.waiting": "waiting",
-  "workflow.error": "failed",
-  "workflow.done": "waving",
-  "physical.carried": "idle",
-  "physical.struggling": "running-left",
-  "physical.falling": "idle",
-  "physical.recovering": "idle"
-} as const satisfies Partial<Record<AnimationRef, PetdexRow>>;
-
 const petdexRowByAnimation = {
-  ...Object.fromEntries(
-    Object.entries(legacyAnimationByPetdexRow).map(([row, animation]) => [animation, row])
-  ),
-  ...canonicalPetdexRows
+  ...Object.fromEntries(Object.entries(legacyAnimationByPetdexRow).map(([row, animation]) => [animation, row]))
 } as Partial<Record<AnimationRef, PetdexRow>>;
 
-export interface SpriteRenderModel {
+interface SpriteRenderModelBase {
   animation: AnimationRef;
-  row: PetdexRow;
-  frame: SpriteFrame;
-  atlasKind: "asset" | "url" | "probe";
-  atlasUrl: string;
-  atlasStyle: CSSProperties;
+  sourceKind: AnimationFrameSource["kind"];
   className: string;
   style: CSSProperties;
   loop: boolean;
   procedural: ProceduralEffect[];
 }
 
+export interface PetdexSpriteRenderModel extends SpriteRenderModelBase {
+  sourceKind: "petdex-row";
+  row: PetdexRow;
+  frame: SpriteFrame;
+  atlasKind: "asset" | "url" | "probe";
+  atlasUrl: string;
+  atlasStyle: CSSProperties;
+}
+
+export interface PngSequenceSpriteRenderModel extends SpriteRenderModelBase {
+  sourceKind: "png-sequence";
+  frameUrl: string;
+  frameIndex: number;
+  frameCount: number;
+  fps: number;
+}
+
+export interface MissingSpriteRenderModel extends SpriteRenderModelBase {
+  sourceKind: "missing";
+}
+
+export type SpriteRenderModel =
+  | PetdexSpriteRenderModel
+  | PngSequenceSpriteRenderModel
+  | MissingSpriteRenderModel;
+
 export interface SpriteRendererProps {
   intent: AnimationIntent;
   frameIndex: number;
   atlasUrl: string;
   onAtlasError?: () => void;
+  onFrameSequenceError?: (animation: AnimationRef) => void;
 }
 
 export interface PartnerRendererProps extends SpriteRendererProps {
@@ -73,7 +80,11 @@ export interface PartnerRendererProps extends SpriteRendererProps {
 }
 
 export function petdexRowForAnimation(animation: AnimationRef): PetdexRow {
-  return petdexRowByAnimation[animation] ?? "idle";
+  const row = petdexRowByAnimation[animation];
+  if (row === undefined) {
+    throw new Error(`Animation ${animation} does not have a Petdex row source`);
+  }
+  return row;
 }
 
 export function normalizeSpriteColumn(frameIndex: number): number {
@@ -88,13 +99,20 @@ export function normalizeSpriteColumnForRow(row: PetdexRow, frameIndex: number):
   if (!Number.isInteger(frameCount) || frameCount < 1 || frameCount > PETDEX_COLUMNS) {
     return normalizeSpriteColumn(frameIndex);
   }
+  return normalizeFrameIndex(frameIndex, frameCount);
+}
+
+export function normalizeFrameIndex(frameIndex: number, frameCount: number): number {
+  if (!Number.isInteger(frameCount) || frameCount < 1) {
+    return 0;
+  }
   if (!Number.isFinite(frameIndex)) {
     return 0;
   }
   return ((Math.trunc(frameIndex) % frameCount) + frameCount) % frameCount;
 }
 
-function atlasKind(atlasUrl: string): SpriteRenderModel["atlasKind"] {
+function atlasKind(atlasUrl: string): PetdexSpriteRenderModel["atlasKind"] {
   if (atlasUrl.startsWith("asset:") || atlasUrl.includes("://asset.localhost/")) {
     return "asset";
   }
@@ -109,8 +127,6 @@ export function spriteRenderModelForIntent(
   frameIndex: number,
   atlasUrl: string
 ): SpriteRenderModel {
-  const row = petdexRowForAnimation(intent.body.animation);
-  const frame = spriteFrame(row, normalizeSpriteColumnForRow(row, frameIndex));
   const width = SPRITE_RENDER_WIDTH;
   const height = SPRITE_RENDER_HEIGHT;
   const procedural = [...intent.body.procedural].sort();
@@ -119,18 +135,8 @@ export function spriteRenderModelForIntent(
     intent.body.loop ? "is-looping" : "is-once",
     ...procedural.map((effect) => `effect-${effect}`)
   ].join(" ");
-
-  return {
+  const base = {
     animation: intent.body.animation,
-    row,
-    frame,
-    atlasKind: atlasKind(atlasUrl),
-    atlasUrl,
-    atlasStyle: {
-      width: SPRITE_RENDER_WIDTH * PETDEX_COLUMNS,
-      height: SPRITE_RENDER_HEIGHT * PETDEX_ROWS,
-      transform: `translate3d(-${frame.columnIndex * width}px, -${frame.rowIndex * height}px, 0)`
-    },
     className,
     loop: intent.body.loop,
     procedural,
@@ -139,16 +145,118 @@ export function spriteRenderModelForIntent(
       height
     }
   };
+
+  if (intent.body.source.kind === "png-sequence") {
+    const frames = intent.body.source.frames;
+    const normalizedFrameIndex = normalizePngSequenceFrameIndex(
+      frameIndex,
+      frames.length,
+      intent.body.loop
+    );
+    return {
+      ...base,
+      sourceKind: "png-sequence",
+      frameUrl: frames[normalizedFrameIndex] ?? "",
+      frameIndex: normalizedFrameIndex,
+      frameCount: frames.length,
+      fps: intent.body.source.fps
+    };
+  }
+
+  if (intent.body.source.kind === "missing") {
+    return {
+      ...base,
+      sourceKind: "missing"
+    };
+  }
+
+  const row = intent.body.source.row;
+  const normalizedColumn = normalizeFrameIndex(frameIndex, intent.body.source.frameCount);
+  const frame = spriteFrame(row, normalizedColumn);
+
+  return {
+    ...base,
+    sourceKind: "petdex-row",
+    row,
+    frame,
+    atlasKind: atlasKind(atlasUrl),
+    atlasUrl,
+    atlasStyle: {
+      width: SPRITE_RENDER_WIDTH * PETDEX_COLUMNS,
+      height: SPRITE_RENDER_HEIGHT * PETDEX_ROWS,
+      transform: `translate3d(-${frame.columnIndex * width}px, -${frame.rowIndex * height}px, 0)`
+    }
+  };
 }
 
-export function SpriteRenderer({ intent, frameIndex, atlasUrl, onAtlasError }: SpriteRendererProps) {
+function normalizePngSequenceFrameIndex(
+  frameIndex: number,
+  frameCount: number,
+  loop: boolean
+): number {
+  if (!Number.isInteger(frameCount) || frameCount < 1) {
+    return 0;
+  }
+  if (!Number.isFinite(frameIndex)) {
+    return 0;
+  }
+  const index = Math.trunc(frameIndex);
+  if (loop) {
+    return ((index % frameCount) + frameCount) % frameCount;
+  }
+  return Math.min(Math.max(index, 0), frameCount - 1);
+}
+
+export function SpriteRenderer({
+  intent,
+  frameIndex,
+  atlasUrl,
+  onAtlasError,
+  onFrameSequenceError
+}: SpriteRendererProps) {
   const model = spriteRenderModelForIntent(intent, frameIndex, atlasUrl);
+
+  if (model.sourceKind === "png-sequence") {
+    return (
+      <div
+        className={model.className}
+        data-animation={model.animation}
+        data-loop={model.loop ? "true" : "false"}
+        data-frame-source="png-sequence"
+        data-frame-index={model.frameIndex}
+        data-frame-count={model.frameCount}
+        data-frame-fps={model.fps}
+        style={model.style}
+      >
+        <img
+          className="sprite-sequence-frame"
+          src={model.frameUrl}
+          onError={() => onFrameSequenceError?.(model.animation)}
+          alt=""
+          draggable={false}
+        />
+      </div>
+    );
+  }
+
+  if (model.sourceKind === "missing") {
+    return (
+      <div
+        className={`${model.className} is-missing-source`}
+        data-animation={model.animation}
+        data-loop={model.loop ? "true" : "false"}
+        data-frame-source="missing"
+        style={model.style}
+      />
+    );
+  }
 
   return (
     <div
       className={model.className}
       data-animation={model.animation}
       data-loop={model.loop ? "true" : "false"}
+      data-frame-source="petdex-row"
       data-sprite-scale-x={SPRITE_RENDER_SCALE_X}
       data-sprite-scale-y={SPRITE_RENDER_SCALE_Y}
       data-sprite-column={model.frame.columnIndex}
@@ -173,6 +281,7 @@ export function PartnerRenderer({
   frameIndex,
   atlasUrl,
   onAtlasError,
+  onFrameSequenceError,
   dragging,
   onPointerDown,
   onPointerMove,
@@ -205,6 +314,7 @@ export function PartnerRenderer({
           frameIndex={frameIndex}
           atlasUrl={atlasUrl}
           onAtlasError={onAtlasError}
+          onFrameSequenceError={onFrameSequenceError}
         />
       </div>
     </>

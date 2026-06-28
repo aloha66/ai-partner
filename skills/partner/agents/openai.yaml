@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Partner"
+  short_description: "Toggle the AI Partner companion"
+  default_prompt: "Use $partner to toggle the AI Partner desktop companion."

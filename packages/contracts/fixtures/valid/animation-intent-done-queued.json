@@ -3,7 +3,12 @@
   "body": {
     "animation": "physical.falling",
     "procedural": ["drop"],
-    "loop": false
+    "loop": false,
+    "source": {
+      "kind": "png-sequence",
+      "frames": ["asset://localhost/physical-falling/000.png"],
+      "fps": 8
+    }
   },
   "bubble": {
     "state": "done",

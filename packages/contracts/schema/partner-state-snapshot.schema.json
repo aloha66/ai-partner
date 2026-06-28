@@ -35,7 +35,7 @@
     },
     "source": {
       "type": ["string", "null"],
-      "enum": ["cli", "codex-wrapper", "demo-script", "claude-hook", null]
+      "enum": ["cli", "codex-wrapper", "demo-script", "claude-hook", "codex-hook", null]
     },
     "message": {
       "type": "string",

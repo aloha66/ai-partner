@@ -147,6 +147,7 @@ struct IngressAcceptedEvent {
 enum IngressDecision {
     Accept(IngressAcceptedEvent),
     Duplicate,
+    Quit,
 }
 
 #[derive(Debug)]
@@ -157,6 +158,7 @@ struct HandlerResult {
 
 type EventHandler =
     Arc<dyn Fn(IngressAcceptedEvent) -> Result<HandlerResult, String> + Send + Sync + 'static>;
+type ControlHandler = Arc<dyn Fn() + Send + Sync + 'static>;
 
 #[derive(Debug)]
 struct IngressGate {
@@ -217,7 +219,7 @@ impl IngressGate {
             return Err(HttpRejection::new(405, "method_not_allowed"));
         }
 
-        if request.path != "/events" {
+        if request.path != "/events" && request.path != "/control/quit" {
             return Err(HttpRejection::new(404, "not_found"));
         }
 
@@ -225,6 +227,13 @@ impl IngressGate {
             .ok_or_else(|| HttpRejection::new(401, "missing_bearer_token"))?;
         if authorization.trim() != format!("Bearer {}", self.token) {
             return Err(HttpRejection::new(401, "invalid_bearer_token"));
+        }
+
+        if request.path == "/control/quit" {
+            if !request.body.is_empty() {
+                return Err(HttpRejection::new(400, "invalid_control_body"));
+            }
+            return Ok(IngressDecision::Quit);
         }
 
         let content_type = header_value(&request, "content-type")
@@ -432,7 +441,11 @@ pub fn start_local_ingress(
             })
         }) as EventHandler
     };
-    let worker = spawn_server_thread(listener, shutdown.clone(), gate, handler);
+    let control_handler = {
+        let app = app.clone();
+        Arc::new(move || app.exit(0)) as ControlHandler
+    };
+    let worker = spawn_server_thread(listener, shutdown.clone(), gate, handler, control_handler);
 
     Ok(LocalIngress {
         descriptor_path,
@@ -448,6 +461,7 @@ fn spawn_server_thread(
     shutdown: Arc<AtomicBool>,
     gate: Arc<IngressGate>,
     handler: EventHandler,
+    control_handler: ControlHandler,
 ) -> JoinHandle<()> {
     thread::spawn(move || {
         let _ = listener.set_nonblocking(true);
@@ -459,8 +473,9 @@ fn spawn_server_thread(
                     }
                     let gate = gate.clone();
                     let handler = handler.clone();
+                    let control_handler = control_handler.clone();
                     thread::spawn(move || {
-                        handle_connection(stream, gate, handler);
+                        handle_connection(stream, gate, handler, control_handler);
                     });
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
@@ -474,13 +489,23 @@ fn spawn_server_thread(
     })
 }
 
-fn handle_connection(mut stream: TcpStream, gate: Arc<IngressGate>, handler: EventHandler) {
+fn handle_connection(
+    mut stream: TcpStream,
+    gate: Arc<IngressGate>,
+    handler: EventHandler,
+    control_handler: ControlHandler,
+) {
     let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
     let _ = stream.set_write_timeout(Some(READ_TIMEOUT));
 
+    let mut quit_after_response = false;
     let response = match read_http_request(&mut stream) {
         Ok(request) => match gate.validate_request(request) {
             Ok(IngressDecision::Duplicate) => HttpResponse::json(202, r#"{"ok":true}"#),
+            Ok(IngressDecision::Quit) => {
+                quit_after_response = true;
+                HttpResponse::json(202, r#"{"ok":true,"action":"quit"}"#)
+            }
             Ok(IngressDecision::Accept(event)) => match handler(event) {
                 Ok(_) => HttpResponse::json(202, r#"{"ok":true}"#),
                 Err(_) => HttpResponse::json(400, r#"{"ok":false,"error":"invalid_event"}"#),
@@ -492,6 +517,10 @@ fn handle_connection(mut stream: TcpStream, gate: Arc<IngressGate>, handler: Eve
 
     let _ = stream.write_all(&response.into_bytes());
     let _ = stream.flush();
+
+    if quit_after_response {
+        control_handler();
+    }
 }
 
 fn read_http_request(stream: &mut impl Read) -> Result<HttpRequest, HttpRejection> {
@@ -1074,6 +1103,20 @@ mod tests {
         }
     }
 
+    fn control_quit_request(authorization: Option<String>, body: Vec<u8>) -> HttpRequest {
+        let mut headers = vec![("content-length".to_string(), body.len().to_string())];
+        if let Some(authorization) = authorization {
+            headers.push(("authorization".to_string(), authorization));
+        }
+
+        HttpRequest {
+            method: "POST".to_string(),
+            path: "/control/quit".to_string(),
+            headers,
+            body,
+        }
+    }
+
     fn unique_temp_path(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
             "ai-partner-test-{name}-{}-{}",
@@ -1180,6 +1223,39 @@ mod tests {
             .validate_request(origin)
             .expect_err("origin should reject");
         assert_eq!(rejection.status, 403);
+    }
+
+    #[test]
+    fn gate_accepts_authorized_quit_control_without_json_payload() {
+        let gate = IngressGate::new(token());
+
+        let decision = gate
+            .validate_request(control_quit_request(
+                Some(format!("Bearer {}", token())),
+                Vec::new(),
+            ))
+            .expect("authorized quit control should pass");
+
+        assert!(matches!(decision, IngressDecision::Quit));
+    }
+
+    #[test]
+    fn gate_rejects_quit_control_without_auth_or_with_body() {
+        let gate = IngressGate::new(token());
+
+        let missing_auth = gate
+            .validate_request(control_quit_request(None, Vec::new()))
+            .expect_err("missing auth should reject");
+        assert_eq!(missing_auth.status, 401);
+
+        let bad_body = gate
+            .validate_request(control_quit_request(
+                Some(format!("Bearer {}", token())),
+                b"{}".to_vec(),
+            ))
+            .expect_err("quit body should reject");
+        assert_eq!(bad_body.status, 400);
+        assert_eq!(bad_body.code, "invalid_control_body");
     }
 
     #[test]

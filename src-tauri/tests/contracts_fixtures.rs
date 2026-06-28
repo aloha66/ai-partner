@@ -30,6 +30,7 @@ enum WorkflowSource {
     CodexWrapper,
     DemoScript,
     ClaudeHook,
+    CodexHook,
 }
 
 #[derive(Debug, Deserialize)]

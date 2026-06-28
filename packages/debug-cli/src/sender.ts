@@ -24,7 +24,8 @@ const contractWorkflowSources = [
   "cli",
   "codex-wrapper",
   "demo-script",
-  "claude-hook"
+  "claude-hook",
+  "codex-hook"
 ] as const satisfies readonly WorkflowSource[];
 
 export async function sendWorkflowEvent(

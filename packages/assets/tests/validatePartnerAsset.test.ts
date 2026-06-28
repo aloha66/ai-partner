@@ -243,7 +243,7 @@ describe("validatePartnerAsset", () => {
     expect(result.errors).toContainEqual(expect.objectContaining({ code: "path_symlink" }));
   });
 
-  it("rejects extension frame symlinks", async () => {
+  it("skips extension frame symlinks without invalidating the Petdex base asset", async () => {
     const root = await makePartnerRoot();
     const source = join(root, "extras", "workflow-done");
     await ensureAssetFixtureDir(source);
@@ -263,11 +263,11 @@ describe("validatePartnerAsset", () => {
 
     const result = await validatePartnerAsset(root, { readImageMetadata: validPetdexMetadata });
 
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
     expect(result.errors).toContainEqual(expect.objectContaining({ code: "path_symlink" }));
   });
 
-  it("rejects extension frames with wrong runtime dimensions", async () => {
+  it("skips extension frames with wrong runtime dimensions without invalidating the Petdex base asset", async () => {
     const root = await makePartnerRoot();
     const source = join(root, "extras", "workflow-done");
     await ensureAssetFixtureDir(source);
@@ -290,11 +290,11 @@ describe("validatePartnerAsset", () => {
           : { width: PETDEX_ATLAS_WIDTH, height: PETDEX_ATLAS_HEIGHT }
     });
 
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
     expect(result.errors).toContainEqual(expect.objectContaining({ code: "runtime_budget" }));
   });
 
-  it("rejects extension frame directory entries that look like PNGs", async () => {
+  it("skips extension frame directory entries that look like PNGs without invalidating the Petdex base asset", async () => {
     const root = await makePartnerRoot();
     const source = join(root, "extras", "workflow-done");
     await ensureAssetFixtureDir(join(source, "000.png"));
@@ -311,11 +311,11 @@ describe("validatePartnerAsset", () => {
 
     const result = await validatePartnerAsset(root, { readImageMetadata: validPetdexMetadata });
 
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
     expect(result.errors).toContainEqual(expect.objectContaining({ code: "runtime_budget" }));
   });
 
-  it("rejects extension animations over frame and fps budgets", async () => {
+  it("skips extension animations over frame and fps budgets without invalidating the Petdex base asset", async () => {
     const root = await makePartnerRoot();
     const source = join(root, "extras", "workflow-done");
     await ensureAssetFixtureDir(source);
@@ -335,7 +335,7 @@ describe("validatePartnerAsset", () => {
 
     const result = await validatePartnerAsset(root, { readImageMetadata: validPetdexMetadata });
 
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
     expect(result.errors.filter((error) => error.code === "runtime_budget")).toHaveLength(2);
   });
 
@@ -363,12 +363,46 @@ describe("validatePartnerAsset", () => {
     expect(capabilities.animations["workflow.done"]).toEqual({
       animation: "workflow.done",
       loop: false,
-      procedural: []
+      procedural: [],
+      source: {
+        kind: "png-sequence",
+        frames: [await realpath(join(source, "000.png"))],
+        fps: 8
+      }
     });
     expect(capabilities.fallbacks["workflow.done"]).toEqual([
       "legacy.waving",
       "legacy.jumping"
     ]);
+  });
+
+  it("keeps manifest fallbacks when a frame sequence source is missing", async () => {
+    const root = await makePartnerRoot();
+    await writeManifest(root, {
+      schemaVersion: "ai-partner.animations.v1",
+      animations: {
+        "workflow.done": {
+          source: "extras/missing",
+          fps: 8,
+          loop: false,
+          fallbacks: ["legacy.waving", "legacy.idle"]
+        }
+      }
+    });
+
+    const result = await validatePartnerAsset(root, {
+      readImageMetadata: validPetdexMetadata
+    });
+    const capabilities = await loadPartnerCapabilities(root, {
+      readImageMetadata: validPetdexMetadata
+    });
+    const intent = resolveAnimation(snapshot("done"), "normal", capabilities);
+
+    expect(result.ok).toBe(true);
+    expect(result.errors).toContainEqual(expect.objectContaining({ code: "path_escape" }));
+    expect(capabilities.animations["workflow.done"]).toBeUndefined();
+    expect(capabilities.fallbacks["workflow.done"]).toEqual(["legacy.waving", "legacy.idle"]);
+    expect(intent.body.animation).toBe("legacy.waving");
   });
 
   it("falls back to the default Petdex partner for invalid assets unless strict mode is requested", async () => {

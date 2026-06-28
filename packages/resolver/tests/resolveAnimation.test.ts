@@ -1,5 +1,6 @@
 import {
   PARTNER_STATE_SNAPSHOT_SCHEMA_VERSION,
+  type PngSequenceFrameSource,
   type PartnerStateSnapshot
 } from "@ai-partner/contracts";
 import { describe, expect, it } from "vitest";
@@ -56,6 +57,14 @@ function withoutAnimations(...removed: string[]): PartnerCapabilities {
   };
 }
 
+function pngSequence(frames: string[] = ["asset://localhost/000.png"]): PngSequenceFrameSource {
+  return {
+    kind: "png-sequence",
+    frames,
+    fps: 8
+  };
+}
+
 describe("resolveAnimation", () => {
   it("uses workflow animation when reading is available and physical state is normal", () => {
     const intent = resolveAnimation(
@@ -64,12 +73,16 @@ describe("resolveAnimation", () => {
       withAnimations({
         "workflow.reading": {
           animation: "workflow.reading",
-          loop: true
+          loop: true,
+          source: pngSequence()
         }
       })
     );
 
     expect(intent.body.animation).toBe("workflow.reading");
+    expect(intent.body.source).toMatchObject({
+      kind: "png-sequence"
+    });
     expect(intent.bubble).toMatchObject({
       state: "reading",
       text: "正在读取项目内容",
@@ -81,6 +94,10 @@ describe("resolveAnimation", () => {
     const intent = resolveAnimation(snapshot("reading"), "normal", defaultPetdexCapabilities);
 
     expect(intent.body.animation).toBe("legacy.review");
+    expect(intent.body.source).toMatchObject({
+      kind: "petdex-row",
+      row: "review"
+    });
     expect(intent.body.procedural).toEqual([]);
   });
 
@@ -140,7 +157,8 @@ describe("resolveAnimation", () => {
       {
         "legacy.waving": {
           animation: "legacy.waving",
-          loop: false
+          loop: false,
+          source: defaultPetdexCapabilities.animations["legacy.waving"]?.source
         }
       },
       {
@@ -211,14 +229,39 @@ describe("resolveAnimation", () => {
       withAnimations({
         "workflow.done": {
           animation: "workflow.done",
-          loop: false
+          loop: false,
+          source: pngSequence(["asset://localhost/done/000.png"])
         }
       })
     );
 
     expect(intent.body.animation).toBe("workflow.done");
     expect(intent.body.loop).toBe(false);
+    expect(intent.body.source).toEqual({
+      kind: "png-sequence",
+      frames: ["asset://localhost/done/000.png"],
+      fps: 8
+    });
     expect(intent.queued).toEqual([]);
+  });
+
+  it("does not hard-render manifest workflow.done as legacy waving when a source is available", () => {
+    const intent = resolveAnimation(
+      snapshot("done"),
+      "normal",
+      withAnimations({
+        "workflow.done": {
+          animation: "workflow.done",
+          loop: false,
+          source: pngSequence(["asset://localhost/extras/workflow-done/000.png"])
+        }
+      })
+    );
+
+    expect(intent.body.animation).toBe("workflow.done");
+    expect(intent.body.source).toMatchObject({
+      kind: "png-sequence"
+    });
   });
 
   it("queues done for five seconds when physical falling overrides body animation", () => {
@@ -229,21 +272,28 @@ describe("resolveAnimation", () => {
       withAnimations({
         "workflow.done": {
           animation: "workflow.done",
-          loop: false
+          loop: false,
+          source: pngSequence(["asset://localhost/done/000.png"])
         },
         "physical.falling": {
           animation: "physical.falling",
           loop: false,
-          procedural: ["drop"]
+          procedural: ["drop"],
+          source: pngSequence(["asset://localhost/falling/000.png"])
         }
       }),
       { now }
     );
 
-    expect(intent.body).toEqual({
+    expect(intent.body).toMatchObject({
       animation: "physical.falling",
       procedural: ["drop"],
-      loop: false
+      loop: false,
+      source: {
+        kind: "png-sequence",
+        frames: ["asset://localhost/falling/000.png"],
+        fps: 8
+      }
     });
     expect(intent.bubble).toMatchObject({
       state: "done",
@@ -272,6 +322,10 @@ describe("resolveAnimation", () => {
 
     expect(intent.body.animation).toBe("legacy.waving");
     expect(intent.body.loop).toBe(false);
+    expect(intent.body.source).toMatchObject({
+      kind: "petdex-row",
+      row: "waving"
+    });
     expect(intent.queued).toEqual([]);
   });
 
@@ -288,6 +342,10 @@ describe("resolveAnimation", () => {
     });
 
     expect(intent.body.animation).toBe("legacy.idle");
+    expect(intent.body.source).toMatchObject({
+      kind: "petdex-row",
+      row: "idle"
+    });
     expect(intent.queued).toEqual([]);
   });
 
@@ -305,6 +363,21 @@ describe("resolveAnimation", () => {
 
     expect(intent.body.animation).toBe("legacy.review");
     expect(intent.queued).toEqual([]);
+  });
+
+  it("keeps truly unresolved custom animations visible as missing instead of silently idling", () => {
+    const capabilities: PartnerCapabilities = {
+      ...defaultPetdexCapabilities,
+      animations: {},
+      fallbacks: {}
+    };
+    const intent = resolveAnimation(snapshot("reading"), "normal", capabilities);
+
+    expect(intent.body.animation).toBe("workflow.reading");
+    expect(intent.body.source).toEqual({
+      kind: "missing",
+      reason: "animation-unavailable"
+    });
   });
 
   it("does not refresh queued done expiry while physical override continues", () => {

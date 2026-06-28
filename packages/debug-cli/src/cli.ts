@@ -12,6 +12,8 @@ import {
   readDebugSessionRunId,
   isDebugWorkflowState,
   sendWorkflowEvent,
+  sendCodexHookEvent,
+  togglePartner,
   writeDebugSessionRunId
 } from "./index.js";
 import { asDebugCliError, DebugCliError } from "./errors.js";
@@ -49,6 +51,12 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     case "sequence":
       await runSequence(args);
       return;
+    case "partner":
+      await runPartner(args);
+      return;
+    case "codex-hook":
+      await runCodexHook(args);
+      return;
     case "help":
     case "--help":
     case "-h":
@@ -57,6 +65,29 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     default:
       throw new DebugCliError(`Unknown command: ${args.command || "(missing)"}`, "usage");
   }
+}
+
+async function runPartner(args: ParsedArgs): Promise<void> {
+  const result = await togglePartner({
+    appPath: readOptionalFlag(args, "app-path"),
+    descriptorPath: readOptionalFlag(args, "descriptor"),
+    connectTimeoutMs: readNumberFlag(args, "connect-timeout-ms", defaultConnectTimeoutMs),
+    postTimeoutMs: readNumberFlag(args, "post-timeout-ms", undefined)
+  });
+  if (result.action === "started") {
+    console.log(`partner started app="${result.appPath}" descriptor="${result.descriptorPath}"`);
+  } else {
+    console.log(`partner stopped descriptor="${result.descriptorPath}"`);
+  }
+}
+
+async function runCodexHook(args: ParsedArgs): Promise<void> {
+  await sendCodexHookEvent({
+    eventName: readOptionalFlag(args, "event"),
+    descriptorPath: readOptionalFlag(args, "descriptor"),
+    postTimeoutMs: readNumberFlag(args, "post-timeout-ms", undefined),
+    strict: args.flags.has("strict")
+  });
 }
 
 async function runDiscover(args: ParsedArgs): Promise<void> {
@@ -212,8 +243,8 @@ function readWorkflowSource(args: ParsedArgs): WorkflowSource | undefined {
   if (source === undefined) {
     return undefined;
   }
-  if (!["cli", "codex-wrapper", "demo-script", "claude-hook"].includes(source)) {
-    throw new DebugCliError("--source must be cli, codex-wrapper, demo-script, or claude-hook.", "usage");
+  if (!["cli", "codex-wrapper", "demo-script", "claude-hook", "codex-hook"].includes(source)) {
+    throw new DebugCliError("--source must be cli, codex-wrapper, demo-script, claude-hook, or codex-hook.", "usage");
   }
   return source as WorkflowSource;
 }
@@ -268,6 +299,8 @@ function printHelp(): void {
 
 Usage:
   ai-partner-debug discover [--descriptor path]
+  ai-partner-debug partner [--app-path path] [--descriptor path]
+  ai-partner-debug codex-hook [--event PreToolUse] [--descriptor path]
   ai-partner-debug send <state> [--message text] [--run-id run_id] [--context-path path] [--auth-id auth_id --auth-description text] [--auth-status pending|allowed|denied]
   ai-partner-debug sequence [--delay-ms 500] [--run-id run_id]
 
