@@ -17,6 +17,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "debug:discover": "pnpm run build && node dist/cli.js discover",
+    "debug:partner": "pnpm run build && node dist/cli.js partner",
     "debug:send": "pnpm run build && node dist/cli.js send",
     "debug:sequence": "pnpm run build && node dist/cli.js sequence",
     "test": "vitest run",

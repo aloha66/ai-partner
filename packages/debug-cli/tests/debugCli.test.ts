@@ -8,14 +8,19 @@ import {
   RUNTIME_DESCRIPTOR_SCHEMA_VERSION,
   assertNoForbiddenFields,
   assertEndpointReachable,
+  createCodexHookSignal,
   createWorkflowEventRequestOptions,
   debugWorkflowStates,
   discoverRuntime,
+  normalizeCodexHookEventName,
   readRuntimeDescriptor,
+  sendCodexHookEvent,
   sendWorkflowEvent,
   createWorkflowEvent,
   readDebugSessionRunId,
+  quitPartnerRuntime,
   writeDebugSessionRunId,
+  togglePartner,
   validateRuntimeDescriptorFreshness
 } from "../src";
 import { discoverOptions, parseArgs } from "../src/cli";
@@ -85,6 +90,81 @@ describe("debug CLI session", () => {
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
+  });
+});
+
+describe("partner toggle", () => {
+  it("stops a running partner runtime through the authorized local control endpoint", async () => {
+    const descriptor = runtimeDescriptor({ port: 43172 });
+    const quitCalls: RuntimeDescriptor[] = [];
+
+    await expect(
+      togglePartner({
+        descriptorPath: "/tmp/runtime-descriptor.json",
+        discover: async () => descriptor,
+        quit: async (runtime) => {
+          quitCalls.push(runtime);
+        },
+        launch: async () => {
+          throw new Error("launch should not run when descriptor is fresh");
+        }
+      })
+    ).resolves.toEqual({
+      action: "stopped",
+      descriptorPath: "/tmp/runtime-descriptor.json"
+    });
+    expect(quitCalls).toEqual([descriptor]);
+  });
+
+  it("starts the packaged app when no live descriptor is available", async () => {
+    const launched: string[] = [];
+
+    await expect(
+      togglePartner({
+        appPath: "/Applications/AI Partner.app",
+        descriptorPath: "/tmp/missing-runtime-descriptor.json",
+        discover: async () => {
+          throw new DebugCliError("missing", "descriptor_missing");
+        },
+        launch: async (appPath) => {
+          launched.push(appPath);
+        }
+      })
+    ).resolves.toEqual({
+      action: "started",
+      appPath: "/Applications/AI Partner.app",
+      descriptorPath: "/tmp/missing-runtime-descriptor.json"
+    });
+    expect(launched).toEqual(["/Applications/AI Partner.app"]);
+  });
+
+  it("does not start a new app when the existing runtime rejects quit auth", async () => {
+    await expectDebugCliError(
+      togglePartner({
+        discover: async () => runtimeDescriptor({ port: 43172 }),
+        quit: async () => {
+          throw new DebugCliError("bad token", "unauthorized");
+        },
+        launch: async () => {
+          throw new Error("launch should not run after auth failure");
+        }
+      }),
+      "unauthorized"
+    );
+  });
+
+  it("posts quit control without a JSON body", async () => {
+    let posted: { status: number; body: string } | undefined;
+
+    await quitPartnerRuntime(runtimeDescriptor({ port: 43172 }), {
+      post: async (_descriptor, timeoutMs) => {
+        expect(timeoutMs).toBeGreaterThan(0);
+        posted = { status: 202, body: '{"ok":true,"action":"quit"}' };
+        return posted;
+      }
+    });
+
+    expect(posted).toEqual({ status: 202, body: '{"ok":true,"action":"quit"}' });
   });
 });
 
@@ -466,6 +546,129 @@ describe("workflow event sender", () => {
         post: async () => ({ status: 202, body: "{}" })
       }),
       "unsafe_payload"
+    );
+  });
+});
+
+describe("Codex hook sender", () => {
+  it("normalizes Codex hook event names from current and legacy shapes", () => {
+    expect(normalizeCodexHookEventName("PreToolUse")).toBe("PreToolUse");
+    expect(normalizeCodexHookEventName("pre_tool_use")).toBe("PreToolUse");
+    expect(normalizeCodexHookEventName("permission-request")).toBe("PermissionRequest");
+    expect(normalizeCodexHookEventName("missing")).toBeUndefined();
+  });
+
+  it("maps hook payload metadata to safe workflow events", async () => {
+    const descriptor = runtimeDescriptor({ port: 43172 });
+    let postedBody: unknown;
+
+    await expect(
+      sendCodexHookEvent({
+        input: {
+          hook_event_name: "pre_tool_use",
+          tool_name: "apply_patch",
+          turn_id: "turn:123"
+        },
+        cwd: "/Users/aloha66/code/ai-partner",
+        timestamp: new Date("2026-06-03T00:00:00Z"),
+        discover: async () => descriptor,
+        send: async (_descriptor, event, options) => {
+          expect(options.allowedSources).toEqual(["codex-hook"]);
+          expect(_descriptor).toBe(descriptor);
+          postedBody = event;
+          return { status: 202, body: "{}" };
+        }
+      })
+    ).resolves.toMatchObject({
+      source: "codex-hook",
+      workflow_state: "editing",
+      run_id: "run_codex_hook_turn:123",
+      message: "Codex is editing",
+      context_path: "/Users/aloha66/code/ai-partner",
+      code_context_allowed: false
+    });
+
+    expect(postedBody).toMatchObject({
+      source: "codex-hook",
+      workflow_state: "editing",
+      context_path: "/Users/aloha66/code/ai-partner",
+      code_context_allowed: false
+    });
+    expect(() => assertNoForbiddenFields(postedBody)).not.toThrow();
+  });
+
+  it("reports approval waits and completed turns without code context", () => {
+    expect(
+      createCodexHookSignal({
+        hookEventName: "PermissionRequest",
+        session_id: "session/with spaces"
+      })
+    ).toMatchObject({
+      eventName: "PermissionRequest",
+      state: "waiting",
+      runId: "run_codex_hook_session_with_spaces",
+      message: "Codex is waiting for approval"
+    });
+
+    expect(createCodexHookSignal({ hook_event_name: "stop", turn_id: "turn_1" }))
+      .toMatchObject({
+        eventName: "Stop",
+        state: "done",
+        runId: "run_codex_hook_turn_1",
+        message: "Codex turn completed"
+      });
+  });
+
+  it("uses Codex hook cwd metadata before falling back to the sender cwd", () => {
+    expect(
+      createCodexHookSignal(
+        {
+          hookEventName: "UserPromptSubmit",
+          cwd: "/Users/aloha66/.codex/worktrees/58a6/ai-partner",
+          session_id: "session_1"
+        },
+        { cwd: "/Users/aloha66/code/ai-partner" }
+      )
+    ).toMatchObject({
+      contextPath: "/Users/aloha66/.codex/worktrees/58a6/ai-partner"
+    });
+
+    expect(
+      createCodexHookSignal(
+        {
+          hookEventName: "UserPromptSubmit",
+          session_id: "session_1"
+        },
+        { cwd: "/Users/aloha66/code/ai-partner" }
+      )
+    ).toMatchObject({
+      contextPath: "/Users/aloha66/code/ai-partner"
+    });
+  });
+
+  it("stays best-effort by default when the partner runtime is unavailable", async () => {
+    await expect(
+      sendCodexHookEvent({
+        eventName: "UserPromptSubmit",
+        input: { session_id: "missing-runtime" },
+        discover: async () => {
+          throw new DebugCliError("missing", "descriptor_missing");
+        }
+      })
+    ).resolves.toBeUndefined();
+  });
+
+  it("can be strict for installer and smoke-test diagnostics", async () => {
+    await expectDebugCliError(
+      sendCodexHookEvent({
+        eventName: "UserPromptSubmit",
+        input: { session_id: "missing-runtime" },
+        strict: true,
+        discover: async () => {
+          throw new DebugCliError("missing", "descriptor_missing");
+        }
+      }),
+      "descriptor_missing"
     );
   });
 });
