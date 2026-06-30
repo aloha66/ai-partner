@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import type { RuntimeDescriptor } from "@ai-partner/contracts";
 import { describe, expect, it } from "vitest";
 import {
@@ -94,6 +95,44 @@ describe("debug CLI session", () => {
 });
 
 describe("partner toggle", () => {
+  it("forwards root pnpm partner arguments only to the debug partner command", async () => {
+    const { runPartnerScript } = await import(
+      pathToFileURL(resolve(repoRoot, "scripts/partner.mjs")).href
+    );
+    const calls: Array<{ command: string; args: string[] }> = [];
+
+    await runPartnerScript(
+      [
+        "--",
+        "--app-path",
+        "/tmp/Test Partner.app",
+        "--descriptor",
+        "/tmp/runtime-descriptor.json"
+      ],
+      async (command: string, args: string[]) => {
+        calls.push({ command, args });
+      }
+    );
+
+    expect(calls).toHaveLength(3);
+    expect(calls[0]).toMatchObject({
+      command: "pnpm",
+      args: ["--filter", "@ai-partner/debug-cli", "build"]
+    });
+    expect(calls[1]?.args).toEqual([
+      resolve(repoRoot, "packages/debug-cli/dist/cli.js"),
+      "partner",
+      "--app-path",
+      "/tmp/Test Partner.app",
+      "--descriptor",
+      "/tmp/runtime-descriptor.json"
+    ]);
+    expect(calls[2]?.args).toEqual([
+      resolve(repoRoot, "scripts/install-codex-hooks.mjs"),
+      "--warn"
+    ]);
+  });
+
   it("stops a running partner runtime through the authorized local control endpoint", async () => {
     const descriptor = runtimeDescriptor({ port: 43172 });
     const quitCalls: RuntimeDescriptor[] = [];
@@ -136,6 +175,51 @@ describe("partner toggle", () => {
       descriptorPath: "/tmp/missing-runtime-descriptor.json"
     });
     expect(launched).toEqual(["/Applications/AI Partner.app"]);
+  });
+
+  it("uses the explicit descriptor for stop without resolving the default app path", async () => {
+    const descriptor = runtimeDescriptor({ port: 43172 });
+    const quitCalls: RuntimeDescriptor[] = [];
+
+    await expect(
+      togglePartner({
+        appPath: "/missing/should-not-be-opened.app",
+        descriptorPath: "/tmp/explicit-runtime-descriptor.json",
+        discover: async (options) => {
+          expect(options.descriptorPath).toBe("/tmp/explicit-runtime-descriptor.json");
+          return descriptor;
+        },
+        quit: async (runtime) => {
+          quitCalls.push(runtime);
+        },
+        launch: async () => {
+          throw new Error("launch should not run for a live descriptor");
+        }
+      })
+    ).resolves.toEqual({
+      action: "stopped",
+      descriptorPath: "/tmp/explicit-runtime-descriptor.json"
+    });
+    expect(quitCalls).toEqual([descriptor]);
+  });
+
+  it("creates a quit control request to the control endpoint with no body", async () => {
+    const descriptor = runtimeDescriptor({ port: 43172 });
+    const requests: Array<{ descriptor: RuntimeDescriptor; timeoutMs: number }> = [];
+
+    await quitPartnerRuntime(descriptor, {
+      post: async (runtime, timeoutMs) => {
+        requests.push({ descriptor: runtime, timeoutMs });
+        return { status: 202, body: '{"ok":true,"action":"quit"}' };
+      }
+    });
+
+    expect(requests).toEqual([
+      {
+        descriptor,
+        timeoutMs: expect.any(Number)
+      }
+    ]);
   });
 
   it("does not start a new app when the existing runtime rejects quit auth", async () => {
@@ -734,6 +818,8 @@ function runtimeDescriptor(overrides: Partial<RuntimeDescriptor>): RuntimeDescri
     ...overrides
   };
 }
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 async function expectDebugCliError(
   promise: Promise<unknown>,

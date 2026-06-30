@@ -12,7 +12,7 @@
     "smoke:dmg:preflight": "node scripts/check-macos-package-config.mjs",
     "build": "pnpm --filter @ai-partner/frontend build",
     "debug:discover": "pnpm --filter @ai-partner/debug-cli debug:discover",
-    "partner": "pnpm --filter @ai-partner/debug-cli build && node packages/debug-cli/dist/cli.js partner && node scripts/install-codex-hooks.mjs --warn",
+    "partner": "node scripts/partner.mjs",
     "partner:install": "pnpm --filter @ai-partner/debug-cli build && node scripts/sync-partner-skill.mjs --write && node scripts/install-codex-hooks.mjs --write && node scripts/install-codex-hooks.mjs --check",
     "codex:hook": "node packages/debug-cli/dist/cli.js codex-hook",
     "codex:hooks:check": "node scripts/install-codex-hooks.mjs --check",
