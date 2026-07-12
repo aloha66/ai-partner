@@ -50,7 +50,7 @@ if (mode === undefined) {
     }
     throw error;
   }
-  const merged = mergeAiPartnerHooks(existing);
+  const merged = mergeAiPartnerHooks(existing.config);
 
   if (mode === "print") {
     process.stdout.write(`${JSON.stringify(merged, null, 2)}\n`);
@@ -95,26 +95,24 @@ async function readExistingHooks(path) {
     if (!isPlainObject(parsed)) {
       throw new Error("hooks.json root must be an object");
     }
-    return parsed;
+    return normalizeHooksFile(parsed);
   } catch (error) {
     if (error?.code === "ENOENT") {
-      return {};
+      return { config: { hooks: {} }, schema: "missing" };
     }
     throw error;
   }
 }
 
 function mergeAiPartnerHooks(existing) {
-  const next = { ...existing };
-  next.managedDir ??= null;
-  next.windowsManagedDir ??= null;
+  const next = { hooks: { ...existing.hooks } };
 
   for (const eventName of hookEvents) {
-    const groups = Array.isArray(next[eventName]) ? next[eventName] : [];
+    const groups = Array.isArray(next.hooks[eventName]) ? next.hooks[eventName] : [];
     const preserved = groups
       .map((group) => removeAiPartnerHandlers(group))
       .filter((group) => group.hooks.length > 0);
-    next[eventName] = [
+    next.hooks[eventName] = [
       ...preserved,
       {
         matcher: null,
@@ -124,6 +122,49 @@ function mergeAiPartnerHooks(existing) {
   }
 
   return next;
+}
+
+function normalizeHooksFile(parsed) {
+  const rootKeys = Object.keys(parsed);
+  if (isPlainObject(parsed.hooks)) {
+    return {
+      config: { hooks: normalizeHooksMap(parsed.hooks) },
+      schema: rootKeys.every((key) => key === "hooks") ? "current" : "invalid-root"
+    };
+  }
+
+  const legacyHooks = legacyHooksMap(parsed);
+  if (Object.keys(legacyHooks).length > 0) {
+    return {
+      config: { hooks: legacyHooks },
+      schema: "legacy"
+    };
+  }
+
+  return {
+    config: { hooks: {} },
+    schema: rootKeys.length === 0 ? "missing" : "invalid-root"
+  };
+}
+
+function normalizeHooksMap(hooks) {
+  const normalized = {};
+  for (const [eventName, groups] of Object.entries(hooks)) {
+    if (Array.isArray(groups)) {
+      normalized[eventName] = groups;
+    }
+  }
+  return normalized;
+}
+
+function legacyHooksMap(root) {
+  const hooks = {};
+  for (const eventName of hookEvents) {
+    if (Array.isArray(root[eventName])) {
+      hooks[eventName] = root[eventName];
+    }
+  }
+  return hooks;
 }
 
 function createAiPartnerHandler(eventName) {
@@ -169,12 +210,18 @@ async function installationProblems(existing) {
     problems.push(error.message);
   }
 
-  if (Object.keys(existing).length === 0) {
+  if (existing.schema === "missing") {
     problems.push(`missing hooks file: ${targetPath}`);
+  } else if (existing.schema !== "current") {
+    problems.push(
+      `hooks file uses deprecated or invalid Codex hook schema: ${targetPath}; run pnpm partner:install to rewrite it`
+    );
   }
 
   for (const eventName of hookEvents) {
-    const groups = Array.isArray(existing[eventName]) ? existing[eventName] : [];
+    const groups = Array.isArray(existing.config.hooks[eventName])
+      ? existing.config.hooks[eventName]
+      : [];
     const installed = groups.some((group) =>
       isPlainObject(group) &&
       Array.isArray(group.hooks) &&

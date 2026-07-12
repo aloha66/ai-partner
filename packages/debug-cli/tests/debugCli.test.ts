@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { RuntimeDescriptor } from "@ai-partner/contracts";
 import { describe, expect, it } from "vitest";
@@ -25,6 +27,8 @@ import {
   validateRuntimeDescriptorFreshness
 } from "../src";
 import { discoverOptions, parseArgs } from "../src/cli";
+
+const execFileAsync = promisify(execFile);
 
 describe("CLI args", () => {
   it("preserves equals signs in inline flag values", () => {
@@ -65,6 +69,58 @@ describe("CLI args", () => {
 
     expect(args.flags.get("auth-status")).toBe("allowed");
     expect(args.flags.get("auth-decided-at")).toBe("2026-06-03T00:00:00Z");
+  });
+});
+
+describe("Codex hook installer", () => {
+  it("prints the current hooks schema when migrating legacy top-level hook entries", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ai-partner-codex-hooks-"));
+    const scriptPath = resolve(repoRoot, "scripts/install-codex-hooks.mjs");
+    const legacyAiHookCommand = [
+      "'/usr/local/bin/node'",
+      "'/tmp/ai-partner/packages/debug-cli/dist/cli.js'",
+      "codex-hook --event PreToolUse --post-timeout-ms 750"
+    ].join(" ");
+
+    try {
+      await writeFile(
+        join(dir, "hooks.json"),
+        JSON.stringify(
+          {
+            managedDir: null,
+            PreToolUse: [
+              {
+                matcher: null,
+                hooks: [
+                  { type: "command", command: "echo preserved" },
+                  { type: "command", command: legacyAiHookCommand }
+                ]
+              }
+            ]
+          },
+          null,
+          2
+        )
+      );
+
+      const { stdout } = await execFileAsync(process.execPath, [scriptPath, "--print"], {
+        env: { ...process.env, CODEX_HOME: dir }
+      });
+      const printed = JSON.parse(stdout) as {
+        hooks: Record<string, Array<{ matcher: unknown; hooks: Array<{ command: string }> }>>;
+        managedDir?: unknown;
+      };
+
+      expect(Object.keys(printed)).toEqual(["hooks"]);
+      expect(printed.managedDir).toBeUndefined();
+      expect(printed.hooks.PreToolUse).toHaveLength(2);
+      expect(printed.hooks.PreToolUse[0]?.hooks).toEqual([
+        { type: "command", command: "echo preserved" }
+      ]);
+      expect(printed.hooks.PreToolUse[1]?.hooks[0]?.command).toContain("codex-hook --event PreToolUse");
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
   });
 });
 
