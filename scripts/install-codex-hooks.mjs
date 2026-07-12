@@ -18,10 +18,10 @@ const hookEvents = [
   "PostCompact",
   "SessionStart",
   "UserPromptSubmit",
-  "SubagentStart",
-  "SubagentStop",
   "Stop"
 ];
+const retiredHookEvents = ["SubagentStart", "SubagentStop"];
+const managedHookEvents = [...hookEvents, ...retiredHookEvents];
 
 const mode = process.argv.includes("--write")
   ? "write"
@@ -107,18 +107,24 @@ async function readExistingHooks(path) {
 function mergeAiPartnerHooks(existing) {
   const next = { hooks: { ...existing.hooks } };
 
-  for (const eventName of hookEvents) {
+  for (const eventName of managedHookEvents) {
     const groups = Array.isArray(next.hooks[eventName]) ? next.hooks[eventName] : [];
     const preserved = groups
       .map((group) => removeAiPartnerHandlers(group))
       .filter((group) => group.hooks.length > 0);
-    next.hooks[eventName] = [
-      ...preserved,
-      {
-        matcher: null,
-        hooks: [createAiPartnerHandler(eventName)]
-      }
-    ];
+    if (hookEvents.includes(eventName)) {
+      next.hooks[eventName] = [
+        ...preserved,
+        {
+          matcher: null,
+          hooks: [createAiPartnerHandler(eventName)]
+        }
+      ];
+    } else if (preserved.length > 0) {
+      next.hooks[eventName] = preserved;
+    } else {
+      delete next.hooks[eventName];
+    }
   }
 
   return next;
@@ -159,7 +165,7 @@ function normalizeHooksMap(hooks) {
 
 function legacyHooksMap(root) {
   const hooks = {};
-  for (const eventName of hookEvents) {
+  for (const eventName of managedHookEvents) {
     if (Array.isArray(root[eventName])) {
       hooks[eventName] = root[eventName];
     }

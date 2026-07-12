@@ -81,6 +81,7 @@ describe("Codex hook installer", () => {
       "'/tmp/ai-partner/packages/debug-cli/dist/cli.js'",
       "codex-hook --event PreToolUse --post-timeout-ms 750"
     ].join(" ");
+    const legacySubagentHookCommand = legacyAiHookCommand.replace("PreToolUse", "SubagentStop");
 
     try {
       await writeFile(
@@ -95,6 +96,12 @@ describe("Codex hook installer", () => {
                   { type: "command", command: "echo preserved" },
                   { type: "command", command: legacyAiHookCommand }
                 ]
+              }
+            ],
+            SubagentStop: [
+              {
+                matcher: null,
+                hooks: [{ type: "command", command: legacySubagentHookCommand }]
               }
             ]
           },
@@ -118,6 +125,7 @@ describe("Codex hook installer", () => {
         { type: "command", command: "echo preserved" }
       ]);
       expect(printed.hooks.PreToolUse[1]?.hooks[0]?.command).toContain("codex-hook --event PreToolUse");
+      expect(printed.hooks.SubagentStop).toBeUndefined();
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
@@ -723,7 +731,7 @@ describe("Codex hook sender", () => {
       source: "codex-hook",
       workflow_state: "editing",
       run_id: "run_codex_hook_turn:123",
-      message: "Codex is editing",
+      message: "正在写入项目内容",
       context_path: "/Users/aloha66/code/ai-partner",
       code_context_allowed: false
     });
@@ -747,7 +755,7 @@ describe("Codex hook sender", () => {
       eventName: "PermissionRequest",
       state: "waiting",
       runId: "run_codex_hook_session_with_spaces",
-      message: "Codex is waiting for approval"
+      message: "正在等待授权"
     });
 
     expect(createCodexHookSignal({ hook_event_name: "stop", turn_id: "turn_1" }))
@@ -755,8 +763,62 @@ describe("Codex hook sender", () => {
         eventName: "Stop",
         state: "done",
         runId: "run_codex_hook_turn_1",
-        message: "Codex turn completed"
+        message: "本轮任务已完成"
       });
+  });
+
+  it("describes the current safe tool activity for the companion card", () => {
+    expect(
+      createCodexHookSignal({
+        hook_event_name: "PreToolUse",
+        tool_name: "Read",
+        turn_id: "turn_reading"
+      })
+    ).toMatchObject({
+      state: "reading",
+      message: "正在读取项目文件"
+    });
+
+    expect(
+      createCodexHookSignal({
+        hook_event_name: "PreToolUse",
+        tool_name: "apply_patch",
+        turn_id: "turn_editing"
+      })
+    ).toMatchObject({
+      state: "editing",
+      message: "正在写入项目内容"
+    });
+
+    expect(
+      createCodexHookSignal({
+        hook_event_name: "PreToolUse",
+        tool_name: "web_search",
+        turn_id: "turn_searching"
+      })
+    ).toMatchObject({
+      state: "reading",
+      message: "正在查询资料"
+    });
+
+    expect(
+      createCodexHookSignal({
+        hook_event_name: "PreToolUse",
+        tool_name: "exec_command",
+        turn_id: "turn_command"
+      })
+    ).toMatchObject({
+      state: "running",
+      message: "正在运行本地命令"
+    });
+  });
+
+  it("does not let completed child callbacks reactivate the partner", () => {
+    expect(
+      createCodexHookSignal({ hook_event_name: "PostToolUse", status: "completed" })
+    ).toBeUndefined();
+    expect(createCodexHookSignal({ hook_event_name: "SubagentStart" })).toBeUndefined();
+    expect(createCodexHookSignal({ hook_event_name: "SubagentStop" })).toBeUndefined();
   });
 
   it("reuses the active turn run_id for Stop hooks that only include a session id", async () => {

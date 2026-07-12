@@ -124,6 +124,10 @@ export function createCodexHookSignal(
     return undefined;
   }
 
+  if (isCompanionLifecycleNoise(eventName, record)) {
+    return undefined;
+  }
+
   return {
     eventName,
     state: stateForCodexHookEvent(eventName, record),
@@ -206,21 +210,56 @@ function messageForCodexHookEvent(
   eventName: CodexHookEventName,
   input: Record<string, unknown>
 ): string {
+  if (eventName === "PreToolUse") {
+    return activityMessageForToolName(readString(input, "tool_name") ?? readString(input, "toolName"));
+  }
+
   const state = stateForCodexHookEvent(eventName, input);
   switch (state) {
     case "reading":
-      return "Codex is reading";
+      return "正在读取项目文件";
     case "editing":
-      return "Codex is editing";
+      return "正在写入项目内容";
     case "waiting":
-      return "Codex is waiting for approval";
+      return "正在等待授权";
     case "done":
-      return "Codex turn completed";
+      return "本轮任务已完成";
     case "error":
-      return "Codex turn needs attention";
+      return "任务需要处理";
     case "running":
-      return "Codex is running";
+      return "正在处理任务";
   }
+}
+
+function activityMessageForToolName(toolName: string | undefined): string {
+  if (toolName === undefined) {
+    return "正在处理任务";
+  }
+
+  const normalized = toolName.toLowerCase();
+  if (/(apply_patch|write|edit|multiedit|patch)/.test(normalized)) {
+    return "正在写入项目内容";
+  }
+  if (/(web|search|fetch|query|scrape|browse)/.test(normalized)) {
+    return "正在查询资料";
+  }
+  if (/(read|list|find|grep|rg|open|view|cat|sed|ls)/.test(normalized)) {
+    return "正在读取项目文件";
+  }
+  if (/(exec|shell|command|terminal)/.test(normalized)) {
+    return "正在运行本地命令";
+  }
+  return "正在处理任务";
+}
+
+function isCompanionLifecycleNoise(
+  eventName: CodexHookEventName,
+  input: Record<string, unknown>
+): boolean {
+  if (eventName === "SubagentStart" || eventName === "SubagentStop") {
+    return true;
+  }
+  return eventName === "PostToolUse" && !hookPayloadLooksFailed(input);
 }
 
 function hookPayloadLooksFailed(input: Record<string, unknown>): boolean {
