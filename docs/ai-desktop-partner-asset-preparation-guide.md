@@ -74,6 +74,11 @@ my-partner/
       001.png
       002.png
       meta.json
+    physical-hover-hug/
+      000.png
+      001.png
+      002.png
+      meta.json
 ```
 
 每个 `extras/*` 目录是一段 PNG frame sequence。
@@ -83,10 +88,11 @@ my-partner/
 | 目录 | 内容 | 是否 MVP 必须 |
 | --- | --- | --- |
 | `workflow-done/` | 任务完成后的庆祝、松一口气、打招呼或开心反馈 | 建议有 |
+| `physical-struggling/` | 被用户按住/拖拽时左右挣扎的小循环 | 自有动画包 v0 必须 |
+| `physical-falling/` | 松手后的下落过渡，不循环 | 自有动画包 v0 必须 |
+| `physical-recovering/` | 落地后站稳，再回到 idle 或 workflow 状态，不循环 | 自有动画包 v0 必须 |
+| `physical-hover-hug/` | 鼠标每次 hover partner 时播放一次拥抱/贴近反馈，不循环 | 自有动画包 v0 必须 |
 | `physical-carried/` | 被用户拎住时的基础姿态，可以先是一帧 | 可后置 |
-| `physical-struggling/` | 被拎住时左右挣扎的小循环 | 可后置 |
-| `physical-falling/` | 松手后的下落过渡，不一定循环 | 可后置 |
-| `physical-recovering/` | 落地后站稳，再回到 idle 或 workflow 状态 | 可后置 |
 
 如果这些目录缺失，resolver 必须 fallback：
 
@@ -97,6 +103,7 @@ my-partner/
 | `physical-struggling` | `legacy.running-left/right + shake` |
 | `physical-falling` | `legacy.idle + gravity/rotation transform` |
 | `physical-recovering` | `legacy.idle` |
+| `physical-hover-hug` | 忽略 hover body override，保持当前 body animation |
 
 ## PNG frame 要求
 
@@ -125,7 +132,7 @@ my-partner/
 }
 ```
 
-`workflow-done`、`physical-falling`、`physical-recovering` 通常不是无限循环；`physical-struggling` 通常循环。
+`workflow-done`、`physical-falling`、`physical-recovering`、`physical-hover-hug` 通常不是无限循环；`physical-struggling` 通常循环。因为 runtime 里部分 loader 会默认把未声明的动画当成循环，非循环动画必须在 manifest 里显式写 `"loop": false`。
 
 ## ai-partner.animations.json
 
@@ -155,12 +162,51 @@ my-partner/
       "priority": 90,
       "tags": ["physical", "struggling", "drag"],
       "fallbacks": ["legacy.running-left", "legacy.running-right", "legacy.idle"]
+    },
+    "physical.falling": {
+      "source": "extras/physical-falling",
+      "fps": 10,
+      "loop": false,
+      "priority": 95,
+      "tags": ["physical", "falling", "release"],
+      "fallbacks": ["legacy.idle"]
+    },
+    "physical.recovering": {
+      "source": "extras/physical-recovering",
+      "fps": 8,
+      "loop": false,
+      "priority": 85,
+      "tags": ["physical", "recovering", "release"],
+      "fallbacks": ["legacy.idle"]
+    },
+    "physical.hover-hug": {
+      "source": "extras/physical-hover-hug",
+      "fps": 8,
+      "loop": false,
+      "priority": 40,
+      "tags": ["physical", "hover", "hug"],
+      "fallbacks": []
     }
   }
 }
 ```
 
-MVP 只需要读取这个静态 manifest，不需要做动画编辑器、资产市场或复杂打包器。
+MVP 只需要读取这个静态 manifest，不需要做动画编辑器、资产市场或复杂打包器。`physical.hover-hug` 缺失时不应该 fallback 到 `legacy.waving` 或 `legacy.jumping`，否则 hover 会被误读成任务完成或庆祝。
+
+## 自有动画包 v0 不是重做 Petdex 9 行
+
+`pet.json + spritesheet.webp` 仍然是当前 app 发现本地 companion 的兼容入口，因此打包工具仍要产出一个 `1536x1872` 的最小兼容 spritesheet。这个 spritesheet 可以是 deterministic compatibility shim 或复用已授权 base asset；不要要求图像模型为自有动画包重新生成 Petdex 的 `running-right`、`running-left`、`waving`、`jumping` 等 legacy 行。
+
+自有动画包 v0 的主要产物是：
+
+```text
+ai-partner.animations.json
+extras/workflow-done/
+extras/physical-struggling/
+extras/physical-falling/
+extras/physical-recovering/
+extras/physical-hover-hug/
+```
 
 ## 你现在应该怎么准备
 

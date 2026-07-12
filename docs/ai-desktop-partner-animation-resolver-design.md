@@ -11,7 +11,7 @@
 核心公式：
 
 ```text
-workflowState + physicalState + partnerCapabilities -> animationIntent
+workflowState + physicalState + transientInteraction + partnerCapabilities -> animationIntent
 ```
 
 ## 三层状态
@@ -56,7 +56,29 @@ normal | carried | struggling | falling | recovering
 
 这些状态不是 AI 专属。后续陪伴模式也应该复用它们。
 
-### 3. 后续陪伴状态
+### 3. 本地瞬时互动触发
+
+MVP 后第一批自有动画需要支持一次性本地互动，但不要把它混进长期 mood/personality 系统：
+
+```text
+hover-hug
+```
+
+含义：
+
+| 触发 | 动画 ref | 含义 |
+| --- | --- | --- |
+| `hover-hug` | `physical.hover-hug` | 用户鼠标每次进入 partner 可见区域时，partner 播放一次拥抱/贴近反馈 |
+
+规则：
+
+1. `hover-hug` 是一次性 body animation，不是持久 `physicalState`。
+2. 鼠标停留期间最多触发一次；离开 partner 后重新进入才可再次触发。
+3. 拖拽链路（`carried` / `struggling` / `falling` / `recovering`）优先级更高，hover 不打断这些动画。
+4. hover 不改变 workflow bubble。`waiting`、`error` 等高优先级提示仍必须显示。
+5. 缺少 `physical.hover-hug` 资源时直接忽略 hover body override，不要 fallback 到 Petdex `waving` 或 `jumping`，避免把“拥抱”误画成任务完成。
+
+### 4. 后续陪伴状态
 
 不进 MVP，但设计要预留：
 
@@ -76,6 +98,7 @@ mode: quiet | companion | focus
 4. `waiting` 和 `error` 的气泡优先级最高。
 5. `done` 如果被 physical 抢占，先显示完成气泡，身体庆祝动画排队，最多保留 5 秒。
 6. 缺少目标动画时，依次使用 extension fallback、Petdex legacy fallback、程序化 transform。
+7. 自有动画资源优先通过 `ai-partner.animations.json` 的 PNG frame sequence 提供；Petdex atlas 只作为兼容和 fallback 层，不要求自有 companion 重新生成 Petdex 的 `running-right`、`running-left`、`waving`、`jumping` 等产品无关行。
 
 ## Resolver 输入输出
 
@@ -123,6 +146,36 @@ mode: quiet | companion | focus
 | `done` | `falling` | 有 `workflow.done` | `physical.falling`，落地后补播 `workflow.done` | 已完成 |
 | `error` | `normal` | 无 `workflow.error` | `legacy.failed` | 发生错误 |
 | `editing` | `struggling` | 无扩展动画 | `legacy.running-left/right + shake` | 正在编辑 |
+| `idle` | `normal` + `hover-hug` | 有 `physical.hover-hug` | `physical.hover-hug` 播放一次 | 无或保持当前提示 |
+| `waiting` | `normal` + `hover-hug` | 有 `physical.hover-hug` | `physical.hover-hug` 播放一次 | 等待用户确认 |
+
+## 自有动画包 v0 必做资源
+
+自有 companion animation pack v0 的目标是补齐 ai-partner 特有互动，不是重新发明 Petdex 9 行 atlas。
+
+必做扩展动画：
+
+| animation ref | 推荐目录 | loop | 触发 |
+| --- | --- | --- | --- |
+| `workflow.done` | `extras/workflow-done/` | false | AI 任务完成后的庆祝、松一口气或开心反馈 |
+| `physical.struggling` | `extras/physical-struggling/` | true | 用户按住/拖拽 partner 时左右挣扎 |
+| `physical.falling` | `extras/physical-falling/` | false | 用户松开鼠标后的下落过渡 |
+| `physical.recovering` | `extras/physical-recovering/` | false | 落地后站稳、恢复到普通状态 |
+| `physical.hover-hug` | `extras/physical-hover-hug/` | false | 鼠标每次 hover partner 时播放一次拥抱反馈 |
+
+可选扩展动画：
+
+| animation ref | 推荐目录 | 说明 |
+| --- | --- | --- |
+| `physical.carried` | `extras/physical-carried/` | 被拎住时的静态/轻微循环姿态；缺失时可由 `legacy.idle + float` 或程序化 transform 兜底 |
+
+运行时约束：
+
+- 每段扩展动画是 PNG frame sequence。
+- 每帧运行尺寸固定 `192x208`。
+- 每段 1-32 帧。
+- fps 1-24。
+- `ai-partner.animations.json` 只引用 companion root 内相对路径。
 
 ## Petdex legacy 映射
 
