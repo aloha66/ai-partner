@@ -3,3 +3,4 @@ dist/
 frontend/dist/
 src-tauri/target/
 .DS_Store
+.agents/skills/gstack/
