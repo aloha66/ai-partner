@@ -753,6 +753,114 @@ describe("Codex hook sender", () => {
     ]);
   });
 
+  it("reuses the latest workspace run_id for Stop hooks that omit session metadata", async () => {
+    const descriptor = runtimeDescriptor({ port: 43172 });
+    const sentEvents: Array<{ run_id: string; workflow_state: string }> = [];
+    const cacheDir = await mkdtemp(join(tmpdir(), "ai-partner-hook-test-"));
+    const send = async (
+      _descriptor: RuntimeDescriptor,
+      event: { run_id: string; workflow_state: string }
+    ) => {
+      sentEvents.push({
+        run_id: event.run_id,
+        workflow_state: event.workflow_state
+      });
+      return { status: 202, body: "{}" };
+    };
+
+    try {
+      await sendCodexHookEvent({
+        input: {
+          hook_event_name: "PreToolUse",
+          tool_name: "Read",
+          turn_id: "turn_workspace",
+          session_id: "session_workspace"
+        },
+        cwd: "/Users/aloha66/code/ai-partner",
+        cacheDir,
+        discover: async () => descriptor,
+        send
+      });
+      await sendCodexHookEvent({
+        input: {
+          hook_event_name: "Stop"
+        },
+        cwd: "/Users/aloha66/code/ai-partner",
+        cacheDir,
+        discover: async () => descriptor,
+        send
+      });
+
+      expect(sentEvents).toEqual([
+        {
+          run_id: "run_codex_hook_turn_workspace",
+          workflow_state: "reading"
+        },
+        {
+          run_id: "run_codex_hook_turn_workspace",
+          workflow_state: "done"
+        }
+      ]);
+    } finally {
+      await rm(cacheDir, { force: true, recursive: true });
+    }
+  });
+
+  it("reuses the session run_id when Stop hook cwd metadata is missing or different", async () => {
+    const descriptor = runtimeDescriptor({ port: 43172 });
+    const sentEvents: Array<{ run_id: string; workflow_state: string }> = [];
+    const cacheDir = await mkdtemp(join(tmpdir(), "ai-partner-hook-test-"));
+    const send = async (
+      _descriptor: RuntimeDescriptor,
+      event: { run_id: string; workflow_state: string }
+    ) => {
+      sentEvents.push({
+        run_id: event.run_id,
+        workflow_state: event.workflow_state
+      });
+      return { status: 202, body: "{}" };
+    };
+
+    try {
+      await sendCodexHookEvent({
+        input: {
+          hook_event_name: "PreToolUse",
+          tool_name: "Read",
+          turn_id: "turn_session_fallback",
+          session_id: "session_fallback",
+          cwd: "/Users/aloha66/.codex/worktrees/58a6/ai-partner"
+        },
+        cwd: "/Users/aloha66/code/ai-partner",
+        cacheDir,
+        discover: async () => descriptor,
+        send
+      });
+      await sendCodexHookEvent({
+        input: {
+          hook_event_name: "Stop",
+          session_id: "session_fallback"
+        },
+        cwd: "/Users/aloha66/code/ai-partner",
+        cacheDir,
+        discover: async () => descriptor,
+        send
+      });
+
+      expect(sentEvents).toEqual([
+        {
+          run_id: "run_codex_hook_turn_session_fallback",
+          workflow_state: "reading"
+        },
+        {
+          run_id: "run_codex_hook_turn_session_fallback",
+          workflow_state: "done"
+        }
+      ]);
+    } finally {
+      await rm(cacheDir, { force: true, recursive: true });
+    }
+  });
+
   it("uses Codex hook cwd metadata before falling back to the sender cwd", () => {
     expect(
       createCodexHookSignal(

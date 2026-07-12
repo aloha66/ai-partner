@@ -307,19 +307,16 @@ async function rememberCodexHookRun(
   if (!shouldRememberRun(signal.eventName)) {
     return;
   }
-  const cachePath = cachePathForHookInput(asRecord(input), cwd, cacheDir);
-  if (cachePath === undefined) {
+  const cachePaths = cachePathsForRememberedHookRun(asRecord(input), cwd, cacheDir);
+  if (cachePaths.length === 0) {
     return;
   }
   await mkdir(cacheRoot(cacheDir), { recursive: true });
-  await writeFile(
-    cachePath,
-    JSON.stringify({
-      runId: signal.runId,
-      updatedAt: new Date().toISOString()
-    }),
-    "utf8"
-  );
+  const payload = JSON.stringify({
+    runId: signal.runId,
+    updatedAt: new Date().toISOString()
+  });
+  await Promise.all(cachePaths.map((cachePath) => writeFile(cachePath, payload, "utf8")));
 }
 
 function shouldRememberRun(eventName: CodexHookEventName): boolean {
@@ -331,20 +328,42 @@ function readRememberedCodexHookRunSync(
   cwd: string | undefined,
   cacheDir?: string
 ): string | undefined {
-  const cachePath = cachePathForHookInput(input, cwd, cacheDir);
-  if (cachePath === undefined) {
-    return undefined;
-  }
-  try {
-    const payload = JSON.parse(readFileSync(cachePath, "utf8")) as unknown;
-    const record = asRecord(payload);
-    if (Object.keys(record).length === 0) {
-      return undefined;
+  for (const cachePath of cachePathsForReadableHookRun(input, cwd, cacheDir)) {
+    try {
+      const payload = JSON.parse(readFileSync(cachePath, "utf8")) as unknown;
+      const record = asRecord(payload);
+      if (Object.keys(record).length === 0) {
+        continue;
+      }
+      const runId = readString(record, "runId");
+      if (runId !== undefined) {
+        return runId;
+      }
+    } catch {
+      continue;
     }
-    return readString(record, "runId");
-  } catch {
-    return undefined;
   }
+  return undefined;
+}
+
+function cachePathsForRememberedHookRun(
+  input: Record<string, unknown>,
+  cwd: string | undefined,
+  cacheDir?: string
+): string[] {
+  return uniqueCachePaths([
+    cachePathForHookInput(input, cwd, cacheDir),
+    cachePathForHookSession(input, cacheDir),
+    cachePathForHookContext(input, cwd, cacheDir)
+  ]);
+}
+
+function cachePathsForReadableHookRun(
+  input: Record<string, unknown>,
+  cwd: string | undefined,
+  cacheDir?: string
+): string[] {
+  return cachePathsForRememberedHookRun(input, cwd, cacheDir);
 }
 
 function cachePathForHookInput(
@@ -352,11 +371,7 @@ function cachePathForHookInput(
   cwd: string | undefined,
   cacheDir?: string
 ): string | undefined {
-  const session =
-    readString(input, "session_id") ??
-    readString(input, "sessionId") ??
-    readString(input, "conversation_id") ??
-    readString(input, "conversationId");
+  const session = sessionKeyForHookInput(input);
   if (session === undefined) {
     return undefined;
   }
@@ -366,6 +381,60 @@ function cachePathForHookInput(
     .digest("hex")
     .slice(0, 40);
   return join(cacheRoot(cacheDir), `${key}.json`);
+}
+
+function cachePathForHookSession(
+  input: Record<string, unknown>,
+  cacheDir?: string
+): string | undefined {
+  const session = sessionKeyForHookInput(input);
+  if (session === undefined) {
+    return undefined;
+  }
+  const key = scopedCacheKey("session", session);
+  return join(cacheRoot(cacheDir), `${key}.json`);
+}
+
+function cachePathForHookContext(
+  input: Record<string, unknown>,
+  cwd: string | undefined,
+  cacheDir?: string
+): string | undefined {
+  const context = contextPathForCodexHook(input, cwd);
+  if (context === undefined) {
+    return undefined;
+  }
+  const key = scopedCacheKey("context", context);
+  return join(cacheRoot(cacheDir), `${key}.json`);
+}
+
+function sessionKeyForHookInput(input: Record<string, unknown>): string | undefined {
+  return (
+    readString(input, "session_id") ??
+    readString(input, "sessionId") ??
+    readString(input, "conversation_id") ??
+    readString(input, "conversationId")
+  );
+}
+
+function scopedCacheKey(scope: string, value: string): string {
+  return createHash("sha256")
+    .update(`${scope}\0${value}`)
+    .digest("hex")
+    .slice(0, 40);
+}
+
+function uniqueCachePaths(paths: Array<string | undefined>): string[] {
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const path of paths) {
+    if (path === undefined || seen.has(path)) {
+      continue;
+    }
+    seen.add(path);
+    unique.push(path);
+  }
+  return unique;
 }
 
 function cacheRoot(cacheDir: string | undefined): string {
