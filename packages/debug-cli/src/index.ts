@@ -1,5 +1,6 @@
 export * from "./constants.js";
 export * from "./codexHook.js";
+export * from "./codexTurnWatcher.js";
 export * from "./debugSession.js";
 export * from "./discovery.js";
 export * from "./errors.js";

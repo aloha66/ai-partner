@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import {
   mkdir,
@@ -59,6 +60,16 @@ export interface SendCodexHookEventOptions {
     event: WorkflowEventWire,
     options: SendWorkflowEventOptions
   ) => Promise<SendWorkflowEventResult>;
+  startTurnEndWatcher?: (options: CodexTurnEndWatcherOptions) => void;
+}
+
+export interface CodexTurnEndWatcherOptions {
+  sessionId: string;
+  turnId: string;
+  runId: string;
+  descriptorPath?: string;
+  postTimeoutMs?: number;
+  contextPath?: string;
 }
 
 const source = "codex-hook" as const satisfies WorkflowSource;
@@ -98,6 +109,7 @@ export async function sendCodexHookEvent(
     }
     await (options.send ?? sendWorkflowEvent)(descriptor, event, sendOptions);
     await rememberCodexHookRun(input, signal, options.cwd ?? process.cwd(), options.cacheDir).catch(debugLog);
+    startTurnEndWatcher(input, signal, options);
     return event;
   } catch (error) {
     if (options.strict) {
@@ -106,6 +118,69 @@ export async function sendCodexHookEvent(
     debugLog(error);
     return undefined;
   }
+}
+
+function startTurnEndWatcher(
+  input: unknown,
+  signal: CodexHookSignal,
+  options: SendCodexHookEventOptions
+): void {
+  if (signal.eventName !== "UserPromptSubmit") {
+    return;
+  }
+  const record = asRecord(input);
+  const sessionId = sessionKeyForHookInput(record);
+  const turnId = readString(record, "turn_id") ?? readString(record, "turnId");
+  if (sessionId === undefined || turnId === undefined) {
+    return;
+  }
+
+  const watcherOptions: CodexTurnEndWatcherOptions = {
+    sessionId,
+    turnId,
+    runId: signal.runId,
+    ...(options.descriptorPath === undefined ? {} : { descriptorPath: options.descriptorPath }),
+    ...(options.postTimeoutMs === undefined ? {} : { postTimeoutMs: options.postTimeoutMs }),
+    ...(signal.contextPath === undefined ? {} : { contextPath: signal.contextPath })
+  };
+  try {
+    (options.startTurnEndWatcher ?? startDetachedTurnEndWatcher)(watcherOptions);
+  } catch (error) {
+    debugLog(error);
+  }
+}
+
+function startDetachedTurnEndWatcher(options: CodexTurnEndWatcherOptions): void {
+  const entrypoint = process.argv[1];
+  if (entrypoint === undefined) {
+    return;
+  }
+  const args = [
+    entrypoint,
+    "codex-hook-watch-turn",
+    "--session-id",
+    options.sessionId,
+    "--turn-id",
+    options.turnId,
+    "--run-id",
+    options.runId
+  ];
+  if (options.descriptorPath !== undefined) {
+    args.push("--descriptor", options.descriptorPath);
+  }
+  if (options.postTimeoutMs !== undefined) {
+    args.push("--post-timeout-ms", String(options.postTimeoutMs));
+  }
+  if (options.contextPath !== undefined) {
+    args.push("--context-path", options.contextPath);
+  }
+
+  const child = spawn(process.execPath, args, {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true
+  });
+  child.unref();
 }
 
 export function createCodexHookSignal(
@@ -211,7 +286,7 @@ function messageForCodexHookEvent(
   input: Record<string, unknown>
 ): string {
   if (eventName === "PreToolUse") {
-    return activityMessageForToolName(readString(input, "tool_name") ?? readString(input, "toolName"));
+    return activityMessageForTool(input);
   }
 
   const state = stateForCodexHookEvent(eventName, input);
@@ -231,25 +306,95 @@ function messageForCodexHookEvent(
   }
 }
 
-function activityMessageForToolName(toolName: string | undefined): string {
+function activityMessageForTool(input: Record<string, unknown>): string {
+  const toolName = readString(input, "tool_name") ?? readString(input, "toolName");
   if (toolName === undefined) {
     return "正在处理任务";
   }
 
   const normalized = toolName.toLowerCase();
   if (/(apply_patch|write|edit|multiedit|patch)/.test(normalized)) {
-    return "正在写入项目内容";
+    const fileName = safeFileName(input);
+    return fileName === undefined ? "正在写入项目内容" : `正在更新 ${fileName}`;
   }
   if (/(web|search|fetch|query|scrape|browse)/.test(normalized)) {
-    return "正在查询资料";
+    return "正在进行网络搜索";
   }
   if (/(read|list|find|grep|rg|open|view|cat|sed|ls)/.test(normalized)) {
-    return "正在读取项目文件";
+    const fileName = safeFileName(input);
+    return fileName === undefined ? "正在读取项目文件" : `正在读取 ${fileName}`;
   }
   if (/(exec|shell|command|terminal)/.test(normalized)) {
-    return "正在运行本地命令";
+    const command = safeCommandSummary(input);
+    return command === undefined ? "正在运行本地命令" : `正在运行 ${command}`;
   }
   return "正在处理任务";
+}
+
+function safeFileName(input: Record<string, unknown>): string | undefined {
+  const path = safeToolInputString(input, ["file_path", "filePath", "path"]);
+  if (path === undefined || path.includes("\n") || path.includes("\r")) {
+    return undefined;
+  }
+  const segments = path.trim().split(/[\\/]+/).filter(Boolean);
+  const fileName = segments.at(-1);
+  if (fileName === undefined || fileName === "." || fileName === "..") {
+    return undefined;
+  }
+  return shortenStatusText(fileName, 64);
+}
+
+function safeCommandSummary(input: Record<string, unknown>): string | undefined {
+  const command = safeToolInputString(input, ["command", "cmd"]);
+  if (command === undefined || command.includes("\n") || command.includes("\r")) {
+    return undefined;
+  }
+  const normalized = command.trim().replace(/\s+/g, " ");
+  if (normalized.length === 0 || containsSensitiveCommandValue(normalized)) {
+    return undefined;
+  }
+  const withoutEnvironment = normalized.replace(
+    /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)+/,
+    ""
+  );
+  if (withoutEnvironment.length === 0) {
+    return undefined;
+  }
+  return shortenStatusText(compactAbsolutePaths(withoutEnvironment), 88);
+}
+
+function safeToolInputString(
+  input: Record<string, unknown>,
+  keys: readonly string[]
+): string | undefined {
+  const toolInput = asRecord(input.tool_input ?? input.toolInput);
+  for (const key of keys) {
+    const value = readString(toolInput, key);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function containsSensitiveCommandValue(command: string): boolean {
+  return /(?:api[_-]?key|apikey|access[_-]?token|token|secret|password|passwd|authorization|bearer|cookie|credential|private[_-]?key)/i.test(command)
+    || /\b[A-Za-z_][A-Za-z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|AUTH|COOKIE|CREDENTIAL)\s*=/i.test(command);
+}
+
+function compactAbsolutePaths(command: string): string {
+  return command.replace(/(^|[\s=])(?:~\/|\/|[A-Za-z]:\\)[^\s"']+/g, (value, prefix: string) => {
+    const fileName = value.slice(prefix.length).split(/[\\/]+/).filter(Boolean).at(-1);
+    return `${prefix}${fileName ?? "..."}`;
+  });
+}
+
+function shortenStatusText(value: string, maxLength: number): string {
+  const characters = [...value];
+  if (characters.length <= maxLength) {
+    return value;
+  }
+  return `${characters.slice(0, maxLength - 3).join("")}...`;
 }
 
 function isCompanionLifecycleNoise(

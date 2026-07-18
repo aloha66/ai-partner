@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -12,12 +12,14 @@ import {
   assertNoForbiddenFields,
   assertEndpointReachable,
   createCodexHookSignal,
+  codexTurnEndForTranscriptLine,
   createWorkflowEventRequestOptions,
   debugWorkflowStates,
   discoverRuntime,
   normalizeCodexHookEventName,
   readRuntimeDescriptor,
   sendCodexHookEvent,
+  waitForCodexTurnEnd,
   sendWorkflowEvent,
   createWorkflowEvent,
   readDebugSessionRunId,
@@ -782,6 +784,18 @@ describe("Codex hook sender", () => {
     expect(
       createCodexHookSignal({
         hook_event_name: "PreToolUse",
+        tool_name: "Read",
+        tool_input: { file_path: "/Users/aloha66/code/ai-partner/frontend/src/App.tsx" },
+        turn_id: "turn_reading_file"
+      })
+    ).toMatchObject({
+      state: "reading",
+      message: "正在读取 App.tsx"
+    });
+
+    expect(
+      createCodexHookSignal({
+        hook_event_name: "PreToolUse",
         tool_name: "apply_patch",
         turn_id: "turn_editing"
       })
@@ -793,12 +807,36 @@ describe("Codex hook sender", () => {
     expect(
       createCodexHookSignal({
         hook_event_name: "PreToolUse",
+        tool_name: "apply_patch",
+        toolInput: { filePath: "C:\\workspace\\ai-partner\\src\\main.rs" },
+        turn_id: "turn_editing_file"
+      })
+    ).toMatchObject({
+      state: "editing",
+      message: "正在更新 main.rs"
+    });
+
+    expect(
+      createCodexHookSignal({
+        hook_event_name: "PreToolUse",
         tool_name: "web_search",
         turn_id: "turn_searching"
       })
     ).toMatchObject({
       state: "reading",
-      message: "正在查询资料"
+      message: "正在进行网络搜索"
+    });
+
+    expect(
+      createCodexHookSignal({
+        hook_event_name: "PreToolUse",
+        tool_name: "web_search",
+        tool_input: { query: "internal unreleased roadmap" },
+        turn_id: "turn_searching_private"
+      })
+    ).toMatchObject({
+      state: "reading",
+      message: "正在进行网络搜索"
     });
 
     expect(
@@ -811,6 +849,42 @@ describe("Codex hook sender", () => {
       state: "running",
       message: "正在运行本地命令"
     });
+
+    expect(
+      createCodexHookSignal({
+        hook_event_name: "PreToolUse",
+        tool_name: "exec_command",
+        tool_input: { command: "pnpm test --filter @ai-partner/frontend" },
+        turn_id: "turn_command_summary"
+      })
+    ).toMatchObject({
+      state: "running",
+      message: "正在运行 pnpm test --filter @ai-partner/frontend"
+    });
+
+    expect(
+      createCodexHookSignal({
+        hook_event_name: "PreToolUse",
+        tool_name: "exec_command",
+        tool_input: { command: "pnpm test --config=/Users/aloha66/private/vitest.config.ts" },
+        turn_id: "turn_command_path"
+      })
+    ).toMatchObject({
+      state: "running",
+      message: "正在运行 pnpm test --config=vitest.config.ts"
+    });
+
+    const secretCommand = createCodexHookSignal({
+      hook_event_name: "PreToolUse",
+      tool_name: "exec_command",
+      toolInput: { command: "API_KEY=super-secret pnpm test" },
+      turn_id: "turn_command_secret"
+    });
+    expect(secretCommand).toMatchObject({
+      state: "running",
+      message: "正在运行本地命令"
+    });
+    expect(secretCommand?.message).not.toContain("super-secret");
   });
 
   it("does not let completed child callbacks reactivate the partner", () => {
@@ -819,6 +893,37 @@ describe("Codex hook sender", () => {
     ).toBeUndefined();
     expect(createCodexHookSignal({ hook_event_name: "SubagentStart" })).toBeUndefined();
     expect(createCodexHookSignal({ hook_event_name: "SubagentStop" })).toBeUndefined();
+  });
+
+  it("starts one local end watcher for each submitted Codex turn", async () => {
+    const descriptor = runtimeDescriptor({ port: 43172 });
+    const started: Array<Record<string, string | number | undefined>> = [];
+    const cacheDir = await mkdtemp(join(tmpdir(), "ai-partner-hook-test-"));
+    try {
+      await sendCodexHookEvent({
+        input: {
+          hook_event_name: "UserPromptSubmit",
+          session_id: "session_watch",
+          turn_id: "turn_watch"
+        },
+        cwd: "/Users/aloha66/code/ai-partner",
+        cacheDir,
+        discover: async () => descriptor,
+        send: async () => ({ status: 202, body: "{}" }),
+        startTurnEndWatcher: (options) => started.push(options)
+      });
+
+      expect(started).toEqual([
+        {
+          sessionId: "session_watch",
+          turnId: "turn_watch",
+          runId: "run_codex_hook_turn_watch",
+          contextPath: "/Users/aloha66/code/ai-partner"
+        }
+      ]);
+    } finally {
+      await rm(cacheDir, { force: true, recursive: true });
+    }
   });
 
   it("reuses the active turn run_id for Stop hooks that only include a session id", async () => {
@@ -1030,6 +1135,67 @@ describe("Codex hook sender", () => {
       }),
       "descriptor_missing"
     );
+  });
+});
+
+describe("Codex turn end watcher", () => {
+  it("recognizes only terminal events for the active turn", () => {
+    expect(
+      codexTurnEndForTranscriptLine(
+        JSON.stringify({
+          type: "event_msg",
+          payload: { type: "turn_aborted", turn_id: "turn_other" }
+        }),
+        "turn_active"
+      )
+    ).toBeUndefined();
+    expect(
+      codexTurnEndForTranscriptLine(
+        JSON.stringify({
+          type: "event_msg",
+          payload: { type: "turn_aborted", turn_id: "turn_active" }
+        }),
+        "turn_active"
+      )
+    ).toBe("aborted");
+    expect(
+      codexTurnEndForTranscriptLine(
+        JSON.stringify({
+          method: "turn/completed",
+          params: { turn: { id: "turn_active" } }
+        }),
+        "turn_active"
+      )
+    ).toBe("completed");
+  });
+
+  it("waits for a manually interrupted turn in its own session transcript", async () => {
+    const sessionsRoot = await mkdtemp(join(tmpdir(), "ai-partner-codex-sessions-"));
+    const sessionId = "session_abc";
+    const transcript = join(sessionsRoot, "2026", "07", "12", `rollout-${sessionId}.jsonl`);
+    try {
+      await mkdir(dirname(transcript), { recursive: true });
+      await writeFile(
+        transcript,
+        `${JSON.stringify({
+          type: "event_msg",
+          payload: { type: "turn_aborted", turn_id: "turn_abort" }
+        })}\n`,
+        { encoding: "utf8", flush: true }
+      );
+
+      await expect(
+        waitForCodexTurnEnd({
+          sessionId,
+          turnId: "turn_abort",
+          sessionsRoot,
+          pollIntervalMs: 1,
+          timeoutMs: 50
+        })
+      ).resolves.toBe("aborted");
+    } finally {
+      await rm(sessionsRoot, { force: true, recursive: true });
+    }
   });
 });
 

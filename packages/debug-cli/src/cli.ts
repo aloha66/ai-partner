@@ -13,6 +13,7 @@ import {
   isDebugWorkflowState,
   sendWorkflowEvent,
   sendCodexHookEvent,
+  waitForCodexTurnEnd,
   togglePartner,
   writeDebugSessionRunId
 } from "./index.js";
@@ -57,6 +58,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     case "codex-hook":
       await runCodexHook(args);
       return;
+    case "codex-hook-watch-turn":
+      await runCodexHookTurnWatcher(args);
+      return;
     case "help":
     case "--help":
     case "-h":
@@ -87,6 +91,29 @@ async function runCodexHook(args: ParsedArgs): Promise<void> {
     descriptorPath: readOptionalFlag(args, "descriptor"),
     postTimeoutMs: readNumberFlag(args, "post-timeout-ms", undefined),
     strict: args.flags.has("strict")
+  });
+}
+
+async function runCodexHookTurnWatcher(args: ParsedArgs): Promise<void> {
+  const ended = await waitForCodexTurnEnd({
+    sessionId: readRequiredFlag(args, "session-id"),
+    turnId: readRequiredFlag(args, "turn-id")
+  });
+  if (ended !== "aborted") {
+    return;
+  }
+
+  const descriptor = await discoverRuntime(discoverOptions(args, { skipEndpointCheck: true }));
+  const event = createWorkflowEvent({
+    state: "done",
+    runId: readRequiredFlag(args, "run-id"),
+    message: "本轮任务已停止",
+    source: "codex-hook",
+    contextPath: readOptionalFlag(args, "context-path")
+  });
+  await sendWorkflowEvent(descriptor, event, {
+    ...sendOptions(args),
+    allowedSources: ["codex-hook"]
   });
 }
 
@@ -234,6 +261,14 @@ function readOptionalFlag(args: ParsedArgs, key: string): string | undefined {
   }
   if (value === true) {
     throw new DebugCliError(`--${key} requires a value.`, "usage");
+  }
+  return value;
+}
+
+function readRequiredFlag(args: ParsedArgs, key: string): string {
+  const value = readOptionalFlag(args, key);
+  if (value === undefined || value.length === 0) {
+    throw new DebugCliError(`--${key} is required.`, "usage");
   }
   return value;
 }
