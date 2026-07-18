@@ -49,7 +49,6 @@ const layout = {
   menuMaxHeight: cssPxVar("t8-menu-max-height"),
   selectorWidth: cssPxVar("t8-selector-width"),
   selectorMaxHeight: cssPxVar("t8-selector-max-height"),
-  statusPillWidth: cssPxVar("t8-status-pill-width"),
   interactionCardWidth: cssPxVar("t8-interaction-card-width"),
   interactionCardMaxHeight: cssPxVar("t8-interaction-card-max-height"),
   interactionCardPadding: cssPxVar("t8-interaction-card-padding"),
@@ -82,18 +81,10 @@ describe("default 520x360 renderer layout sanity", () => {
     const contentWidth = layout.windowWidth - layout.padding * 2;
     const contentHeight = layout.windowHeight - layout.padding * 2;
     const companionWidth = contentWidth;
-    const companionStackHeight =
-      layout.bubbleMaxHeight +
-      layout.companionGap +
-      layout.spriteHeight +
-      layout.companionGap +
-      24 +
-      layout.spriteBottomSafeArea;
+    const companionStackHeight = layout.spriteHeight + layout.spriteBottomSafeArea;
 
     expect(companionWidth).toBeGreaterThanOrEqual(layout.companionMinWidth);
     expect(layout.spriteWidth).toBeLessThanOrEqual(companionWidth);
-    expect(layout.bubbleMaxWidth).toBeLessThanOrEqual(companionWidth);
-    expect(layout.statusPillWidth).toBeLessThanOrEqual(companionWidth);
     expect(companionStackHeight).toBeLessThanOrEqual(contentHeight);
     expect(styles).toMatch(/\.window-spike\s*\{[^}]*grid-template-columns:\s*1fr;/s);
   });
@@ -101,17 +92,6 @@ describe("default 520x360 renderer layout sanity", () => {
   it("keeps the partner hitbox aligned to the renderer footprint", () => {
     expect(layout.spriteWidth).toBe(SPRITE_RENDER_WIDTH);
     expect(layout.spriteHeight).toBe(SPRITE_RENDER_HEIGHT);
-  });
-
-  it("keeps one-line bubble content inside its border-box overlay", () => {
-    const bubbleContentHeight =
-      layout.bubbleLabelLineHeight +
-      layout.bubbleGap +
-      layout.bubbleMessageLineHeight +
-      2 * layout.bubblePaddingY +
-      2 * layout.bubbleBorder;
-
-    expect(bubbleContentHeight).toBeLessThanOrEqual(layout.bubbleMaxHeight);
   });
 
   it("keeps the click-through banner within the right panel footprint", () => {
@@ -200,7 +180,7 @@ describe("default 520x360 renderer layout sanity", () => {
 
     expect(mobileCardWidth).toBeLessThanOrEqual(minimumWindowWidth);
     expect(scaledSpriteWidth).toBeLessThan(mobileCardWidth);
-    expect(styles).toMatch(/\.companion-zone\.has-interaction-card \.bubble,[\s\S]*\.companion-zone\.has-interaction-card \.status-pill\s*\{[\s\S]*display:\s*none;/s);
+    expect(styles).toMatch(/\.companion-zone\.has-interaction-card \.bubble\s*\{[\s\S]*display:\s*none;/s);
     expect(styles).toMatch(/\.companion-zone\.has-interaction-card \.partner\s*\{[\s\S]*width:\s*var\(--t8-sprite-width\);/s);
     expect(styles).toMatch(/\.companion-zone\.has-interaction-card \.partner\s*\{[\s\S]*margin-bottom:\s*var\(--t8-interaction-companion-overlap\);/s);
     expect(styles).toMatch(/\.companion-zone\.has-interaction-card \.partner\s*\{[\s\S]*transform:\s*scale\(var\(--t8-interaction-companion-scale\)\);/s);

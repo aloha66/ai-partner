@@ -28,7 +28,6 @@
   --t8-menu-max-height: 330px;
   --t8-selector-width: 342px;
   --t8-selector-max-height: 330px;
-  --t8-status-pill-width: 156px;
   --t8-interaction-card-width: 300px;
   --t8-interaction-card-max-height: 168px;
   --t8-interaction-card-padding: 9px;
@@ -156,7 +155,7 @@ button {
   height: 100%;
   padding-bottom: var(--t8-sprite-bottom-safe-area);
   display: grid;
-  align-content: end;
+  align-content: center;
   justify-items: center;
   gap: var(--t8-companion-gap);
 }
@@ -170,8 +169,7 @@ button {
   overflow: hidden;
 }
 
-.companion-zone.has-interaction-card .bubble,
-.companion-zone.has-interaction-card .status-pill {
+.companion-zone.has-interaction-card .bubble {
   display: none;
 }
 
@@ -297,42 +295,6 @@ button {
   50% {
     transform: translate3d(0, -5px, 0);
   }
-}
-
-.status-pill {
-  box-sizing: border-box;
-  width: var(--t8-status-pill-width);
-  min-height: 24px;
-  padding: 4px 9px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface);
-  color: var(--color-muted);
-  box-shadow: var(--shadow-soft);
-  backdrop-filter: blur(12px);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  overflow: hidden;
-}
-
-.status-pill span,
-.status-pill strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.status-pill span {
-  font-size: 10px;
-}
-
-.status-pill strong {
-  color: var(--color-accent-strong);
-  font-size: 11px;
-  font-weight: 750;
 }
 
 .interaction-card {

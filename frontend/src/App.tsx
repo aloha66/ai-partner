@@ -909,11 +909,6 @@ export function App() {
           onPointerCancel={() => resetManagedDrag("pointer_cancel")}
           onLostPointerCapture={resetLostCaptureIfDragging}
         />
-
-        <div className="status-pill" role="status" aria-live="polite">
-          <span>{stateDisplay.pausedLabel}</span>
-          <strong>{activeCompanion.fallbackUsed || atlasFailed || failedFrameSequenceAnimations.length > 0 ? "fallback" : stateDisplay.workflowLabel}</strong>
-        </div>
       </section>
 
       {contextMenuOpen ? (

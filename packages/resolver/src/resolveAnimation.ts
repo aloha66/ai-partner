@@ -111,6 +111,9 @@ function workflowAnimationRef(workflowState: WorkflowState): AnimationRef {
 }
 
 function bubbleForSnapshot(snapshot: PartnerStateSnapshot): BubbleIntent | null {
+  if (snapshot.workflowState === "idle") {
+    return null;
+  }
   return {
     state: snapshot.workflowState,
     text: snapshot.message ?? defaultBubbleText[snapshot.workflowState],

@@ -47,4 +47,8 @@ describe("companion product UI boundary", () => {
     expect(appSource).toContain('aria-label="workflow context details"');
     expect(appSource).not.toContain('aria-label="workflow source details"');
   });
+
+  it("keeps persistent workflow diagnostics out of the product surface", () => {
+    expect(appSource).not.toContain('className="status-pill"');
+  });
 });

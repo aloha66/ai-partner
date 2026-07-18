@@ -101,6 +101,13 @@ describe("resolveAnimation", () => {
     expect(intent.body.procedural).toEqual([]);
   });
 
+  it("keeps the idle companion visually quiet", () => {
+    const intent = resolveAnimation(snapshot("idle"), "normal", defaultPetdexCapabilities);
+
+    expect(intent.body.animation).toBe("legacy.idle");
+    expect(intent.bubble).toBeNull();
+  });
+
   it("falls editing back to legacy running", () => {
     const intent = resolveAnimation(snapshot("editing"), "normal", defaultPetdexCapabilities);
 
